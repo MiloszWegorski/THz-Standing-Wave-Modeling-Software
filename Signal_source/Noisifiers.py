@@ -1,37 +1,14 @@
 import numpy as np
 from abc import ABC, abstractmethod
+from base_class import BaseClass
 
-class noise(ABC):
+class noise(ABC, BaseClass):
 
     def noisify(self, amplitudes):
         return np.array(self._noisify(amplitudes))
     
     @abstractmethod
     def _noisify(self, amplitudes):
-        pass
-
-    def get_name(self):
-        return self.name
-    
-    def get_params(self, param_name):
-        return self._get_params(param_name)
-
-    @abstractmethod
-    def _get_params(self, param_name):
-        pass
-    
-    def set_params(self, param_name, param_value):
-        return self._set_params(param_name, param_value)
-
-    @abstractmethod
-    def _get_params(self, param_name, param_value):
-        pass
-
-    def get_param_names(self):
-        return self._get_param_names()
-    
-    @abstractmethod
-    def _get_param_names(self):
         pass
 
 

@@ -1,10 +1,10 @@
 import numpy as np
 from scipy import stats
 from abc import ABC, abstractmethod
-from base_class import BaseClass
+from analysis_tools.dependencies import BaseClass
 
 
-class MeasurementScheme(BaseClass, ABC):
+class MeasurementScheme(BaseClass):
     
     def get_points(self):
         return self._get_points()

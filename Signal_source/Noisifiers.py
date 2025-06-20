@@ -1,8 +1,8 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from base_class import BaseClass
+from analysis_tools.dependencies import BaseClass
 
-class noise(ABC, BaseClass):
+class noise(BaseClass):
 
     def noisify(self, amplitudes):
         return np.array(self._noisify(amplitudes))

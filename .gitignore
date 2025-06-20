@@ -1,3 +1,6 @@
 __pycache__
 .venv
 bin
+Jupyter_notebook_tests
+Test.py
+statistical_analysis.py

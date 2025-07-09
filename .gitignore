@@ -4,3 +4,7 @@ bin
 Jupyter_notebook_tests
 Test.py
 statistical_analysis.py
+temp.py
+Noise_tests.ipnyb
+Simulation_time_tests.ipnyb
+statistical_analysis.py

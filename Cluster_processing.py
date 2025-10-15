@@ -2,52 +2,57 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
 import time
+from tqdm import tqdm
 
 from analysis_tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
-from Signal_source.Measurement_Systems import HornMeasurementSystem
+from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, SimpleTransmittedSignal, get_wavenums, create_coeff_list
+from Signal_source.Measurement_Systems import MeasurementSystem, FreqSignalMeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter
+from analysis_tools.Save_as_file import Save_simulation
 
-def create_comp_lists(N, M, trans, Measure_scheme, frequencies):
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+def create_comp_lists(comp_list, trans, Measure_scheme, frequencies):
 
     #start time
     time_taken = time.time()
 
-    #create component list from given inputs
-    distances = Measure_scheme.get_points()
     
     if hasattr(frequencies, '__iter__'):
-        comp_list = np.empty((len(frequencies),M*N, len(distances)), dtype=complex)    
+        coeff_list = np.empty((len(frequencies),len(comp_list), len(Measure_scheme)), dtype=complex)    
 
 
         for i, freq in enumerate(frequencies):
-            comp_list[i] = create_coeff_list(M, N, trans, distances, get_wavenums(freq))
+            coeff_list[i] = create_coeff_list(comp_list, trans, Measure_scheme, get_wavenums(freq))
     else:
-       comp_list = np.empty((M*N, len(distances)), dtype=complex)
+       coeff_list = np.empty((len(comp_list), len(Measure_scheme)), dtype=complex)
 
-       comp_list = create_coeff_list(M, N, trans, distances, get_wavenums(frequencies)) 
+       coeff_list = create_coeff_list(comp_list, trans, Measure_scheme, get_wavenums(frequencies)) 
 
     #take end time and take away start time
     time_taken = time.time() - time_taken
 
-    return time_taken, comp_list
+    return time_taken, coeff_list
 
 #-----------------------------------------------------------------------------#
 
-def simulate_measurements(num_simulations, Amplitudes, measure_scheme, comp_list, Amp_noise, Phase_noise):
-
-    #start time
+def simulate_given_signal(num_simulations, freq, Signal, measure_scheme, comp_list, Amp_noise, Phase_noise):
+        #start time
     time_taken = time.time()
 
     #create horn and measure scheme
-    signal = NoisyComplexSignal(HornSignal(comp_list), Amp_noise, Phase_noise)
+    #move noise into passed in signal object
+    noisy_signal = NoisyComplexSignal(Signal,
+                                Amp_noise, Phase_noise)
     
-    measure_syst = HornMeasurementSystem(measure_scheme, signal)
+    measure_syst = FreqSignalMeasurementSystem(measure_scheme, noisy_signal)
+
+    coeffs = create_coeff_list(comp_list, 1, measure_scheme, get_wavenums(freq))
 
     #fitter which is used to fit the data
-    fitter = HornTransmissionFitter(comp_list)
+    fitter = HornTransmissionFitter(coeffs)
 
     #generate data num_simulations times
     fitted_params = np.empty((num_simulations, len(comp_list)), dtype=complex)
@@ -55,7 +60,7 @@ def simulate_measurements(num_simulations, Amplitudes, measure_scheme, comp_list
     for i in range(num_simulations):
         
         #simulate data + fit parameters
-        data = measure_syst.Measure(Amplitudes)
+        data = measure_syst.Measure(freq)
 
         fitted_params[i] = fitter.fit_points(data)
         
@@ -64,53 +69,74 @@ def simulate_measurements(num_simulations, Amplitudes, measure_scheme, comp_list
 
     return fitted_params, num_simulations/time_taken
 
-#-----------------------------------------------------------------------------#
-
-def divide_tasks(num_simulations, freqs, coeffs_lists, Amp_lists, Measure_scheme, Amp_noise, Phase_noise):
+def multithread_tasks_given_signal(*, foldername, filename, num_simulations, freqs, 
+                                 coeff_list, Measure_scheme, Signal, Amp_noise, 
+                                 Phase_noise):
     
-    #Currently assumes both coefficients and frequencies are meant to be itterated
 
-    results = np.zeros((len(Amp_lists), len(coeffs_lists), num_simulations, len(coeffs_lists[0])), dtype=complex)
-    rates = np.zeros((len(Amp_lists), len(coeffs_lists)), dtype=float)
+    time_start = time.time()
 
-    for i, amps in enumerate(Amp_lists):
-        for j, coeff in enumerate(coeffs_lists):
-        #these could be split into separate jobs
-            results[i, j], rates[i, j] = simulate_measurements(num_simulations, amps, Measure_scheme, coeff, Amp_noise, Phase_noise)
+    results = np.empty((len(freqs), num_simulations, len(coeff_list)), dtype=complex)
+    result_times = np.empty(len(freqs), dtype=float)
 
-    # create the table to be returned
-    tables = []
-
-    for i, amps_set in enumerate(results):
-        tables.append([])
-        tables[i].append(freqs)
-        comps = np.empty((num_simulations,len(coeffs_lists[0])), dtype=complex)
-        for z, simulation_results in enumerate(amps_set):
-            for components in simulation_results:
-                comps[z] = components
-        for k in range(len(comps[0])):
-            tables[i].append(comps[:, k])
-        for k in Amp_lists[i]:
-            tables[i].append(k)
-
-    return tables
-
-N = 2
-M = 2
-
-amps = [[ 1+0.5j, -0.002-0.02e-1j, 4e-2-0.001e-2j, 6e-10-0.019e-12j], 
-        [ 5+0.5j, -0.002-0.02e-1j, 4e-2-0.001e-2j, 6e-10-0.019e-12j], 
-        [ 2+0.5j, -0.002-0.02e-1j, 4e-2-0.001e-2j, 6e-10-0.019e-12j]]
-
-freqs = np.linspace(10, 20, 10)
-
-distances = UniformMeasurement(-80, 80, 200)
-
-t, comps = create_comp_lists(N, M, False, distances, freqs)
-
-fitted_params = divide_tasks(100, freqs, comps, amps, distances, 0.01, 0.02)
-
-for i in fitted_params:
+    with ProcessPoolExecutor() as executor:
     
-    plt.hist(np.real(i[:, :, 0]))
-    plt.show()
+        futures = {
+            executor.submit(
+                simulate_given_signal,
+                num_simulations,
+                freq,
+                Signal,
+                Measure_scheme,
+                coeff_list,
+                Amp_noise,
+                Phase_noise
+            ): i
+            for i, freq in enumerate(freqs)
+        }
+
+        for future in as_completed(futures):
+            i = futures[future]
+            res, tim = future.result()
+
+            results[i] = res
+            result_times[i] = tim
+    
+    time_tot = time.time() - time_start
+
+    result_table = np.empty((len(freqs) * num_simulations, 2*len(results[0][0])+1), dtype=float)
+
+    column_names = []
+
+    column_names.append('f[Ghz]')
+
+    counter = 0
+
+    for i , (f, amps) in enumerate(zip(freqs, results)):
+
+        amps_split = np.empty((2*len(amps[0])+1), dtype=float)
+
+        amps_split[0] = f
+
+        for j, amp in enumerate(amps):
+            for z, a in enumerate(amp):
+                if counter == 0:
+                    column_names.append('A'+str(z)+'Real')
+                    column_names.append('A'+str(z)+'Angle')
+
+                amps_split[2*z+1] = np.real(a)
+                amps_split[2*z+2] = np.angle(a)
+            
+            result_table[counter] = amps_split
+            counter += 1
+            
+
+    saver = Save_simulation(foldername,filename)
+    saver.save_data(result_table, column_names, [num_simulations, 
+                                                 coeff_list,
+                                                 Measure_scheme,
+                                                 amps,
+                                                 Amp_noise, 
+                                                 Phase_noise])
+
+    return result_table, time_tot

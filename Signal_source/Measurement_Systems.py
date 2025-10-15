@@ -56,7 +56,7 @@ class MeasurementSystem(BaseClass):
         return param_names
     
 
-class HornMeasurementSystem(BaseClass):
+class FreqSignalMeasurementSystem(BaseClass):
     """_summary_
     """
     def __init__(self, scheme, signal):
@@ -70,15 +70,14 @@ class HornMeasurementSystem(BaseClass):
         self.signal = signal
 
     
-    def Measure(self, amplitudes):
+    def Measure(self, freq, noiseless=False):
         """_summary_
 
         Returns:
             _type_: _description_
         """
-        times = self.scheme.get_points()
         
-        return [np.array(times), np.array(self.signal.get_amplitudes(amplitudes))]
+        return [np.array(self.scheme.get_points()), np.array(self.signal.get_amplitudes(freq, self.scheme, noiseless=noiseless))]
         #add get variables method
     
     def _get_name(self):

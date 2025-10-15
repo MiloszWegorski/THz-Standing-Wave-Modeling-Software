@@ -112,7 +112,7 @@ def create_component_list(M : int, N : int, transmission : bool, amps):
     
     return np.array(comp_list)
 
-def create_coeff_list(M : int, N : int, transmission : bool, dists, wavenum):
+def _create_coeff_list(M : int, N : int, transmission : bool, dists, wavenum):
 
     index = 0
 
@@ -121,7 +121,7 @@ def create_coeff_list(M : int, N : int, transmission : bool, dists, wavenum):
 
         for i in range(N):
             for j in range(M):
-                comp_list[index] = np.power(dists, j) * np.power(np.exp(-1j * wavenum * dists), 2*i+1)
+                comp_list[index] = np.power(-dists, j) * np.power(np.exp(-1j * wavenum * dists), 2*i+1)
                 index += 1
 
     else:
@@ -130,9 +130,23 @@ def create_coeff_list(M : int, N : int, transmission : bool, dists, wavenum):
 
         for i in range(N):
             for j in range(M):
-                comp_list[index] = np.power(dists, j) * np.power(np.exp(-1j * wavenum * dists), 2*i)
+                comp_list[index] = np.power(-dists, j) * np.power(np.exp(-1j * wavenum * dists), 2*i)
                     
                 index += 1
 
     
     return np.array(comp_list)
+
+
+def create_coeff_list(comp_list, scheme, wavenum):
+
+    dists = scheme.get_points()
+
+
+    coeff_list = np.empty((len(comp_list), len(dists)), dtype=complex)
+
+    for i, (N, M) in enumerate(comp_list):
+        coeff_list[i] = np.power(dists, M) * np.exp(-1j * N * wavenum * dists)
+
+    
+    return np.array(coeff_list)

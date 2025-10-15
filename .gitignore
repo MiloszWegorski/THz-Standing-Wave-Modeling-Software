@@ -24,3 +24,5 @@ Test_single_fit.py
 Test2.py
 Test_new_scheme.py
 data
+Test_cluster_spectra.py
+statistical_analsis.py

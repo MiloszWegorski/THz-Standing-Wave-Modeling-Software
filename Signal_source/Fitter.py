@@ -2,15 +2,16 @@ import numpy as np
 import scipy
 from abc import ABC, abstractmethod
 from scipy.optimize import curve_fit
+from analysis_tools.dependencies import get_wavenums, create_coeff_list
 
 from analysis_tools.dependencies import *
 class Fitter(ABC):
 
-    def fit_points(self, points):
-        return self._fit_points(points)
+    def fit_points(self, *, Amplitudes, freq, scheme):
+        return self._fit_points(Amplitudes=Amplitudes, freq=freq, scheme=scheme)
     
     @abstractmethod
-    def _fit_points(self):
+    def _fit_points(self, *, Amplitudes, freq, scheme):
         pass
 
 
@@ -141,14 +142,23 @@ class ValleyFitter(Fitter):
 
 class HornTransmissionFitter(Fitter):
 
+    def __init__(self, *, components):
 
-    def __init__(self, coefficient_matrix):
-        
-        self.coeff_list = coefficient_matrix
+        self.freq = np.inf
+        self.scheme = None
+        self.coeff_list = None
+        self.components = components
 
-    def _fit_points(self, data):
+    def _fit_points(self, *, Amplitudes, freq, scheme):
 
-        fit = np.linalg.lstsq(np.rot90(self.coeff_list), data[1], -1)
+        # check if you can reuse coeff matrix
+        if self.freq != freq or self.scheme is None or self.scheme != scheme:
+            pass
+        self.coeff_list = create_coeff_list(self.components, scheme, get_wavenums(freq))
+        self.freq = freq
+        self.scheme = scheme
+
+        fit = np.linalg.lstsq(self.coeff_list.T, Amplitudes, -1)
             
         return fit[0]
 

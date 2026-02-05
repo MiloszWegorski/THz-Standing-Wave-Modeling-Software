@@ -26,3 +26,12 @@ Test_new_scheme.py
 data
 Test_cluster_spectra.py
 statistical_analsis.py
+plots
+Experimental_data
+complex_noise_example.py
+example_measurements.py
+Test_code
+SSH_terminal.py
+spectrum_analysis.py
+.vscode
+1d_chapter_plot.ipynb

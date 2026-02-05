@@ -279,3 +279,108 @@ class Read_File():
         return np.array(self.dist)
 
 
+class Save_simulation():
+
+    def __init__(self,  folder, simulation_name):
+
+        self.folder = folder
+        self.simulation_name = simulation_name
+
+
+    def save_data(self, data_table, columns, Simulation_data):
+
+        with zipfile.ZipFile(self.folder + '.zip', 'x') as folder:
+
+            dataframe = pd.DataFrame(data = data_table, columns=columns)
+
+            with folder.open(f'{self.simulation_name}_data' + '.dat', mode='w') as file:
+
+                dataframe.to_csv(file, sep='\t', index=False)
+
+            with folder.open(f'{self.simulation_name}_parameters' + '.npz', mode='w') as file:
+                np.savez(file,  num_simulations=Simulation_data[0],
+                                coeff_matrix=Simulation_data[1],
+                                measure_scheme=Simulation_data[2].get_points(),
+                                amplitudes=Simulation_data[3],
+                                amplitude_noise=Simulation_data[4],
+                                phase_noise=Simulation_data[5])
+
+
+class Read_Simulation():
+
+    def __init__(self, folder):
+
+        self.frequencies = None
+        self.data = None
+
+        self.coeffs = None
+        self.num_simulations = None
+        self.measure_scheme = None
+        self.simulation_amps = None
+        self.amp_noise = None
+        self.phase_noise = None
+
+        self.read_data(folder)
+
+    def read_data(self, folder):
+
+        with zipfile.ZipFile(folder, 'r') as folder:
+            
+            files = folder.namelist()
+
+            data_file = next((f for f in files if '_data' in f), None)
+            param_file = next((f for f in files if '_parameters' in f), None)
+            
+            with folder.open(data_file) as datfile:
+
+                data = pd.read_csv(datfile, sep='\t')
+
+                keys = data.keys()
+                
+                real_components = []
+                angle_components = []
+
+
+                for i, key in enumerate(keys):
+                    if key[0] == 'f':
+                        self.frequencies = np.array(data[key])
+
+                    if key[0] == 'A':
+                        if 'Real' in key:
+                            real_components.append(np.array(data[key]))
+                        if 'Angle' in key:
+                            angle_components.append(np.array(data[key]))
+
+                complex_data = np.empty((len(real_components), len(real_components[0])), dtype=complex)
+
+                for i, (real, angle) in enumerate(zip(real_components, angle_components)):
+                    complex_data[i] = [complex(r, a) for r, a in zip(real, angle)]
+            
+            self.data = complex_data
+            
+            with folder.open(param_file) as params:
+                parameters = np.load(params, allow_pickle=True)
+
+                self.num_simulations = np.array(parameters['num_simulations'])
+                self.coeffs = np.array(parameters['coeff_matrix'])
+                self.measure_scheme = np.array(parameters['measure_scheme'])
+                self.amp_noise = np.array(parameters['amplitude_noise'])
+                self.phase_noise = np.array(parameters['phase_noise'])
+
+
+    def get_amplitudes(self, frequency):
+
+        indexes = np.where(self.frequencies == frequency)
+
+        amps = np.empty((len(self.data), len(self.data[0][indexes])), dtype = complex)
+
+        for i, amp_list in enumerate(self.data):
+            amps[i] = amp_list[indexes]
+
+        return amps
+    
+    def get_measure_scheme(self):
+
+        return self.measure_scheme
+    
+        

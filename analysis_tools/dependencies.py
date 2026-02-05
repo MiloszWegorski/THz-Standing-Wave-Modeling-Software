@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
+c = 299.792458
 class BaseClass(ABC):
 
     def get_name(self):
@@ -37,15 +38,20 @@ def Sine_wav(times, freq, amp, offset, phase):
 
 def get_wavenums(freq):
     #speed of light in units of mm*GHz
-    c = 299.792458
 
     wavenums = (2 * np.pi * freq)/c
 
     return wavenums
 
+def get_wavelength(freq):
+    
+    wavelenght = c/freq
+
+    return wavelenght
+
 def complex_to_mag_and_phase(complex_number):
 
-    magnitude = 20.0 * np.log10(abs(complex_number))
+    magnitude = 20.0 * np.log10(np.abs(complex_number))
 
     phase = np.rad2deg(np.angle(complex_number))
 
@@ -140,7 +146,7 @@ def _create_coeff_list(M : int, N : int, transmission : bool, dists, wavenum):
 
 def create_coeff_list(comp_list, scheme, wavenum):
 
-    dists = scheme.get_points()
+    dists = scheme.get_points().squeeze()
 
 
     coeff_list = np.empty((len(comp_list), len(dists)), dtype=complex)

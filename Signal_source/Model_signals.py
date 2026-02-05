@@ -236,24 +236,33 @@ class NoisyComplexSignal(FrequencyDistanceBasedSignalAdapter):
             
 class SimpleTransmittedSignal(FrequencyDistanceBasedSignal):
 
-    def __init__(self,*, Amplitude, Attenuation, gamma, source_distance):
+    def __init__(self,*, Amplitude, Attenuation, gammas : np.array, source_distance):
         self.amp = Amplitude
         self.attenuation = Attenuation
         self.separation = source_distance
-        self.gamma = gamma
+        self.gammas = gammas
 
     def _get_amplitudes(self, freq, scheme, *, noiseless):
 
         overall_propagation_distance = self.separation + scheme.get_points()
 
         wavenum = get_wavenums(freq)
-
-        return self.amp * (
+        
+        amps = self.amp * (
                 np.exp(-overall_propagation_distance * self.attenuation)* 
-                np.exp(-1j * wavenum * overall_propagation_distance) +
-                self.gamma * np.exp(-3 * overall_propagation_distance * self.attenuation)* 
-                np.exp(-3j * wavenum * overall_propagation_distance))
-    
+                np.exp(-1j * wavenum * overall_propagation_distance))
+
+        if type(self.gammas) is (np.ndarray or list):
+            for i, gamma in enumerate(self.gammas):
+                amps += self.amp * (gamma * np.exp((-3 - (i*2)) * overall_propagation_distance * self.attenuation)* 
+                    np.exp((-3 - (i*2))*1j * wavenum * overall_propagation_distance))
+        else:
+            amps += self.amp * (self.gammas *
+                    np.exp(-3 * overall_propagation_distance * self.attenuation)* 
+                    np.exp(-3j * wavenum * overall_propagation_distance))
+            
+        return amps
+
     def _get_dimension(self):
         return 1
 
@@ -292,24 +301,29 @@ class SimpleTransmittedSignal(FrequencyDistanceBasedSignal):
 
 class Gaussian_spectrum_signal(FrequencyDistanceBasedSignalAdapter):
 
-    def __init__(self,*, signal : Signal, gamma : float, f_0 : float, Amplitude : float, orientation : int):
+    def __init__(self,*, signal : Signal, gamma : float, f_0 : float, orientation : int):
 
         super().__init__(signal)
         self.gamma = gamma # width of peak
-        self.amplitude = Amplitude #amplitude of peak
         self.f_0 = f_0 #resonant freq
         self.orientation = orientation # changes between peak/troff if it is 1/-1
 
-    
     def _get_amplitudes(self, freq, scheme, noiseless):
-        
+
         sig = self.signal.get_amplitudes(freq, scheme, noiseless=noiseless)
 
-        spectrum_modulation = (self.amplitude*(1/(4*(self.f_0/self.gamma)**2 *
-                                       (1- (freq/self.f_0))**2 + 1)))*np.exp(1j * (np.arctan(self.gamma * freq/
-                                    (self.f_0 - freq)))-np.pi/2)
+        magnitude = 1 / (4*(self.f_0/self.gamma)**2 *
+                        (1 - freq/self.f_0)**2 + 1)
 
-        return sig*spectrum_modulation
+        phase = np.exp(
+            1j * (np.arctan2(self.gamma * freq,
+                            self.f_0 - freq) - np.pi/2)
+        )
+
+        spectrum_modulation = magnitude * phase
+
+        return sig * spectrum_modulation
+
 
 
     def _get_name(self):
@@ -325,8 +339,6 @@ class Gaussian_spectrum_signal(FrequencyDistanceBasedSignalAdapter):
                 return self.gamma
             case 'f_0':
                 return self.f_0
-            case 'amplitude':
-                return self.amplitude
             case _:
                 raise ValueError(f'Unknown parameter name {param_name}')
     
@@ -336,7 +348,5 @@ class Gaussian_spectrum_signal(FrequencyDistanceBasedSignalAdapter):
                 self.gamma = self.gamma
             case 'f_0':
                 self.f_0 = self.f_0
-            case 'amplitude':
-                self.amplitude = self.amplitude
             case _:
                 raise ValueError(f'Unknown parameter name {param_name}')

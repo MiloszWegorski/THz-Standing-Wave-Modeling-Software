@@ -14,4 +14,4 @@ def get_effective_rank(*, freq, measurement_scheme, components=components):
                                       scheme=measurement_scheme,
                                       wavenum=wavenum))
     
-    return coeffs.rank_decomposition(method='lu'), coeffs
+    return coeffs.rank_decomposition(method='svd'), coeffs

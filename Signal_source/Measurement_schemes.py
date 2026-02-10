@@ -1,8 +1,10 @@
 import numpy as np
 from scipy import stats
 from abc import ABC, abstractmethod
+from analysis_tools.dependencies import BaseClass
 
-class MeasurementScheme(ABC):
+
+class MeasurementScheme(BaseClass):
     
     def get_points(self):
         return self._get_points()
@@ -10,57 +12,30 @@ class MeasurementScheme(ABC):
     @abstractmethod
     def _get_points(self):
         pass
-    
-    def get_name(self):
-        return self._get_name()
-    
-    @abstractmethod
-    def _get_name(self):
-        pass
 
-    def get_param_value(self, param_name):
-        return self._get_param_value(param_name)
-    
-    @abstractmethod
-    def _get_param_value(self, param_name):
-        pass
-
-    def set_param_value(self, param_name, param_value):
-        return self._set_param_value(param_name, param_value)
-    
-    @abstractmethod
-    def _set_param_value(self, param_name, param_value):
-        pass
-
-    def get_param_names(self):
-        return self._get_param_names()
-    
-    @abstractmethod
-    def _get_param_names(self):
-        pass
 
 class UniformMeasurement(MeasurementScheme):
 
-    def __init__(self, start_time, end_time, num_points):
-        self.start_time = start_time
-        self.end_time = end_time
+    def __init__(self, *, start_position, end_position, num_points):
+        self.start_position = start_position
+        self.end_position = end_position
         self.num_points = num_points
 
-        self.name = f"Uniform distribution from {start_time} to {end_time}\
+        self.name = f"Uniform distribution from {start_position} to {end_position}\
  with {num_points} points"
 
     def _get_points(self):
-        return np.array(np.linspace(self.start_time, self.end_time, self.num_points))
+        return np.array(np.linspace(self.start_position, self.end_position, self.num_points))
     
     def _get_name(self):
         return self.name
     
     def _get_param_value(self, param_name):
         match param_name:
-            case 'start_time':
-                return self.start_time
-            case 'end_time':
-                return self.end_time
+            case 'start_position':
+                return self.start_position
+            case 'end_position':
+                return self.end_position
             case 'num_points':
                 return self.num_points
             case _:
@@ -68,26 +43,110 @@ class UniformMeasurement(MeasurementScheme):
     
     def _set_param_value(self, param_name, param_value):
         match param_name:
-            case 'start_time':
-                self.start_time = param_value
-            case 'end_time':
-                self.end_time = param_value
+            case 'start_position':
+                self.start_position = param_value
+            case 'end_position':
+                self.end_position = param_value
             case 'num_points':
                 self.num_points = param_value
             case _:
                 raise ValueError('Unknown parameter name') 
             
     def _get_param_names(self):
-        return ['start_time', 'end_time', 'num_points']
+        return ['start_position', 'end_position', 'num_points']
+
+class RandomizedUniformMeasurement(MeasurementScheme):
+
+    def __init__(self, *, start_position, end_position, num_points, randomization):
+        self.start_position = start_position
+        self.end_position = end_position
+        self.num_points = num_points
+        self.randomization_percentage = randomization
+
+        uniform_scheme = np.array(np.linspace(self.start_position, self.end_position, self.num_points))
+
+        step = uniform_scheme[1] - uniform_scheme [0]
+
+        self.randomized_scheme = np.array(uniform_scheme + 
+                            np.random.normal(0.0, step *self.randomization_percentage,
+                                             size=uniform_scheme.shape))
+
+        self.name = f"Uniform distribution from {start_position} to {end_position}\
+ with {num_points} points"
+
+    def _get_points(self):
+
+        return self.randomized_scheme
+    
+    def _get_name(self):
+        return self.name
+    
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'start_position':
+                return self.start_position
+            case 'end_position':
+                return self.end_position
+            case 'num_points':
+                return self.num_points
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}') 
+    
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'start_position':
+                self.start_position = param_value
+            case 'end_position':
+                self.end_position = param_value
+            case 'num_points':
+                self.num_points = param_value
+            case _:
+                raise ValueError('Unknown parameter name') 
+            
+    def _get_param_names(self):
+        return ['start_position', 'end_position', 'num_points']
+    
+
+class CustomArrayMeasurement(MeasurementScheme):
+
+    def __init__(self, *, point_array):
+        self.point_array = point_array
+
+        self.name = f"Returns custom array as measurement scheme"
+
+    def _get_points(self):
+
+        return np.array(self.point_array)
+    
+    def _get_name(self):
+        return self.name
+    
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'point_array':
+                return self.point_array
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}') 
+    
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'point_array':
+                return self.point_array == param_value
+            case _:
+                raise ValueError('Unknown parameter name') 
+            
+    def _get_param_names(self):
+        return ['point_array']
+
 
 class LogMeasurement(MeasurementScheme):
 
-    def __init__(self, start_time, end_time, num_points):
-        self.start_time = start_time
-        self.end_time = end_time
+    def __init__(self, start_position, end_position, num_points):
+        self.start_position = start_position
+        self.end_position = end_position
         self.num_points = num_points
 
-        self.name = f"Logarithmic distribution from {start_time} to {end_time}\
+        self.name = f"Logarithmic distribution from {start_position} to {end_position}\
  with {num_points} points"
 
     def _get_points(self):
@@ -98,10 +157,10 @@ class LogMeasurement(MeasurementScheme):
     
     def _get_param_value(self, param_name):
         match param_name:
-            case 'start_time':
-                return self.start_time
-            case 'end_time':
-                return self.end_time
+            case 'start_position':
+                return self.start_position
+            case 'end_position':
+                return self.end_position
             case 'num_points':
                 return self.num_points
             case _:
@@ -109,14 +168,48 @@ class LogMeasurement(MeasurementScheme):
     
     def _set_param_value(self, param_name, param_value):
         match param_name:
-            case 'start_time':
-                self.start_time = param_value
-            case 'end_time':
-                self.end_time = param_value
+            case 'start_position':
+                self.start_position = param_value
+            case 'end_position':
+                self.end_position = param_value
             case 'num_points':
                 self.num_points = param_value
             case _:
                 raise ValueError(f'Unknown parameter name {param_name}') 
             
     def _get_param_names(self):
-        return ['start_time', 'end_time', 'num_points']
+        return ['start_position', 'end_position', 'num_points']
+    
+
+class DummyMeasurementScheme(MeasurementScheme):
+
+    def __init__(self, dimensions):
+        self.dimensions = dimensions
+
+        self.name = f""
+
+    def _get_points(self):
+        if self.dimensions == 1:
+            return np.zeros(1)
+        else:
+            return np.zeros((1, self.dimensions))
+    
+    def _get_name(self):
+        return self.name
+    
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'dimensions':
+                return self.dimensions
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+    
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'dimensions':
+                self.dimensions = param_value
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}') 
+            
+    def _get_param_names(self):
+        return ['dimensions']

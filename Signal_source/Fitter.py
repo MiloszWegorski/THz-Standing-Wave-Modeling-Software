@@ -2,17 +2,16 @@ import numpy as np
 import scipy
 from abc import ABC, abstractmethod
 from scipy.optimize import curve_fit
+from analysis_tools.dependencies import get_wavenums, create_coeff_list
 
-def Sine_wav(times, freq, amp, offset, phase):
-
-    return amp * np.sin(2 * times * np.pi * freq + phase) + offset
+from analysis_tools.dependencies import *
 class Fitter(ABC):
 
-    def fit_points(self, points):
-        return self._fit_points(points)
+    def fit_points(self, *, Amplitudes, freq, scheme):
+        return self._fit_points(Amplitudes=Amplitudes, freq=freq, scheme=scheme)
     
     @abstractmethod
-    def _fit_points(self):
+    def _fit_points(self, *, Amplitudes, freq, scheme):
         pass
 
 
@@ -31,7 +30,12 @@ class Fitter(ABC):
     def _get_param_names():
         pass
 
-
+    def set_param_values(self, param_name, value):
+        return self._set_param_values(param_name, value)
+    
+    @abstractmethod
+    def _set_param_values(self, param_name, value):
+        pass
 
 class ValleyFitter(Fitter):
 
@@ -103,28 +107,30 @@ class ValleyFitter(Fitter):
 
         #check whether the peak between the first and second clump is positive 
         # or negative
-        if (amplitudes[index_peak]- offset_estimate) < 0:
+        if (amplitudes[index_peak]- offset_estimate) > 0:
             #for a negative peak the first peak is positive therefore the phase
             #can simply be returned
-            phase = ((delta_t/half_period)*np.pi)
-        
-        elif (amplitudes[index_peak] - offset_estimate) > 0:
-            #if peak is positive the first peak is negative therefore the phase
-            #has to be adjusted by half a wavelength
+            
             phase = (((delta_t/half_period)+1)*np.pi)
 
+        elif (amplitudes[index_peak] - offset_estimate) < 0:
+            #if peak is positive the first peak is negative therefore the phase
+            #has to be adjusted by half a wavelength
+            phase = ((delta_t/half_period)*np.pi)
 
         #using curve fit to improve the estimate of the parameters of the wave
         popt, pcov = curve_fit(Sine_wav, times, amplitudes, 
-                            p0=(2.0, amplitude_estimate, 
-                                offset_estimate, phase), 
-                            maxfev=int(1e6), 
-                            bounds=((0.0, 0.0, -np.inf, 0), 
-                                    (np.inf, np.inf, np.inf, 2*np.pi)
-                                    )
-                               )
+                        p0=(frequency_estimate, amplitude_estimate, 
+                            offset_estimate, phase), 
+                        maxfev=int(1e6), 
+                        bounds=([-np.inf, 0.5*amplitude_estimate, 
+                                 -np.inf, 0], 
+                                [np.inf, np.inf,
+                                 np.inf, 2*np.pi]
+                                )
+                            )
 
-
+        #popt = [frequency_estimate, amplitude_estimate, offset_estimate, phase]
         return popt
     
 
@@ -134,16 +140,60 @@ class ValleyFitter(Fitter):
     def _get_param_names():
         return ['frequency', 'amplitude', 'offset', 'phase']
 
-def low_pass_filter(data, step):
-    #average step number of points of all points
-    filtered_data = []
+class HornTransmissionFitter(Fitter):
 
-    # take a value in the middle of a set of a step number value slice of an
-    # array and average the slice returning the smaller array
-    for i in range(int((step-1)/2), len(data), step):
+    def __init__(self, *, components):
 
-        arr_slice = data[int(i-((step-1)/2)): int(i+((step-1)/2))]
+        self.freq = np.inf
+        self.scheme = None
+        self.coeff_list = None
+        self.components = components
 
-        filtered_data.append(np.average(arr_slice))
+    def _fit_points(self, *, Amplitudes, freq, scheme):
 
-    return filtered_data
+        # check if you can reuse coeff matrix
+        if self.freq != freq or self.scheme is None or self.scheme != scheme:
+            pass
+        self.coeff_list = create_coeff_list(self.components, scheme, get_wavenums(freq))
+        self.freq = freq
+        self.scheme = scheme
+
+        fit = np.linalg.lstsq(self.coeff_list.T, Amplitudes, -1)
+            
+        return fit[0]
+
+    def _get_name(self):
+        return f'fitter which fits a signal with {self.num_reflections} reflections\
+            and each of these having {self.components} components at wavenumber {self.wavenum}'
+
+    def _get_param_names(self):
+        return ['frequency', 'num_reflections', 'num_components', 'transmission']
+
+    def _set_param_values(self, param_name, value):
+        match param_name:
+            case 'frequency':
+                self.wavenum = get_wavenums(value)
+            case 'num_reflections':
+                self.num_reflections = value
+                self.component_list = create_component_list(self.components, self.num_reflections, self.transmission)
+            case 'num_components':
+                self.components = value
+                self.component_list = create_component_list(self.components, self.num_reflections, self.transmission)
+            case 'transmission':
+                self.transmission = value
+                self.component_list = create_component_list(self.components, self.num_reflections, self.transmission)
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _get_param_values(self, param_name):
+        match param_name:
+            case 'components':
+                return self.components
+            case 'num_reflections':
+                return self.num_reflections
+            case 'num_components':
+                return self.wavenum
+            case 'transmission':
+                return self.transmission
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  

@@ -1,6 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from analysis_tools.dependencies import BaseClass
+from tools.dependencies import BaseClass
 
 class noise(BaseClass):
 

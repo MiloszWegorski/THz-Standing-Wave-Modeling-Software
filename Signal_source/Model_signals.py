@@ -1,13 +1,13 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from analysis_tools.dependencies import BaseClass
+from tools.dependencies import BaseClass
 
 from Signal_source.Measurement_schemes import DummyMeasurementScheme
 
 from Signal_source.Fitter import complex_to_mag_and_phase
-from analysis_tools.Save_as_file import Mag_and_phase_to_complex
+from tools.Save_as_file import Mag_and_phase_to_complex
 
-from analysis_tools.dependencies import get_wavenums, create_coeff_list, create_component_list
+from tools.dependencies import get_wavenums, create_coeff_matrix, create_component_list
 
 class Signal(BaseClass):
 
@@ -108,15 +108,9 @@ class HornSignal(FrequencyDistanceBasedSignal):
 
     def _get_amplitudes(self, frequency, scheme, noiseless):
 
-        coeff_list = create_coeff_list(self.component_list, scheme, get_wavenums(frequency))
+        coeff_matrix = create_coeff_matrix(self.component_list, scheme, get_wavenums(frequency))
 
-        A_1 = np.zeros(len(scheme.get_points()), dtype= complex)
-
-        for amp, comps in zip(self.component_amplitudes, coeff_list):
-
-            A_1 += amp * comps
-
-        return A_1
+        return coeff_matrix@np.atleast_2d(self.component_amplitudes).T.squeeze()
     
     def _get_dimension(self):
         return super()._get_dimension()
@@ -299,6 +293,70 @@ class SimpleTransmittedSignal(FrequencyDistanceBasedSignal):
         return "Signal object which generates a simple transmission signal"
     
 
+class SimpleReflectedSignal(FrequencyDistanceBasedSignal):
+
+    def __init__(self,*, Amplitude, Attenuation, gammas : np.array, source_distance):
+        self.amp = Amplitude
+        self.attenuation = Attenuation
+        self.separation = source_distance
+        self.gammas = gammas
+
+    def _get_amplitudes(self, freq, scheme, *, noiseless):
+
+        overall_propagation_distance = self.separation + scheme.get_points()
+
+        wavenum = get_wavenums(freq)
+        
+        amps = self.amp * (
+                np.exp(-overall_propagation_distance * self.attenuation)* 
+                np.exp(-0j * wavenum * overall_propagation_distance))
+
+        if type(self.gammas) is (np.ndarray or list):
+            for i, gamma in enumerate(self.gammas):
+                amps += self.amp * (gamma * np.exp((-2 - (i*2)) * overall_propagation_distance * self.attenuation)* 
+                    np.exp((-2 - (i*2))*1j * wavenum * overall_propagation_distance))
+        else:
+            amps += self.amp * (self.gammas *
+                    np.exp(-2 * overall_propagation_distance * self.attenuation)* 
+                    np.exp(-2j * wavenum * overall_propagation_distance))
+            
+        return amps
+
+    def _get_dimension(self):
+        return 1
+
+    def _get_param_names(self):
+        return ['amplitude', 'attenuation', 'wave_number', 'separation_distance']
+
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'amplitude':
+                return self.amp
+            case 'attenuation':
+                return self.attenuation
+            case 'wave_number':
+                return self.wavenum
+            case 'separation_distance':
+                return self.separation
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'amplitude':
+                self.amp = param_value
+            case 'attenuation':
+                self.attenuation = param_value
+            case 'wave_number':
+                self.wavenum = param_value
+            case 'separation_distance':
+                self.separation = param_value
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _get_name(self):
+        return "Signal object which generates a simple transmission signal"    
+
 class Gaussian_spectrum_signal(FrequencyDistanceBasedSignalAdapter):
 
     def __init__(self,*, signal : Signal, gamma : float, f_0 : float, orientation : int):
@@ -350,3 +408,104 @@ class Gaussian_spectrum_signal(FrequencyDistanceBasedSignalAdapter):
                 self.f_0 = self.f_0
             case _:
                 raise ValueError(f'Unknown parameter name {param_name}')
+
+
+class DummySignal(FrequencyDistanceBasedSignal):
+
+    def __init__(self,*, return_value):
+        self.value = return_value
+
+    def _get_amplitudes(self, freq, scheme, *, noiseless):
+
+        return np.ones(len(scheme.get_points())) * self.value
+
+    def _get_dimension(self):
+        return 1
+
+    def _get_param_names(self):
+        return ['amplitude', 'attenuation', 'wave_number', 'separation_distance']
+
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'amplitude':
+                return self.amp
+            case 'attenuation':
+                return self.attenuation
+            case 'wave_number':
+                return self.wavenum
+            case 'separation_distance':
+                return self.separation
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'amplitude':
+                self.amp = param_value
+            case 'attenuation':
+                self.attenuation = param_value
+            case 'wave_number':
+                self.wavenum = param_value
+            case 'separation_distance':
+                self.separation = param_value
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _get_name(self):
+        return "Signal object which generates a simple transmission signal"
+    
+class SimpleSineSignal(FrequencyDistanceBasedSignal):
+
+    def __init__(self,*, Amplitude, phases):
+        
+        if len(Amplitude) != len(phases):
+            raise ValueError("length of parameter arrays dont match")
+        
+        self.Amplitudes = Amplitude
+        self.phases = phases
+
+    def _get_amplitudes(self, freq, scheme, *, noiseless):
+
+        points = scheme.get_points()
+
+        amps = np.zeros_like(points)
+        
+        for (amp, pha) in zip(self.Amplitudes, self.phases):
+            amps += amp * np.sin(2 * np.pi * freq * points + pha)
+            
+        return amps
+
+    def _get_dimension(self):
+        return 1
+
+    def _get_param_names(self):
+        return ['amplitude', 'attenuation', 'wave_number', 'separation_distance']
+
+    def _get_param_value(self, param_name):
+        match param_name:
+            case 'amplitude':
+                return self.amp
+            case 'attenuation':
+                return self.attenuation
+            case 'wave_number':
+                return self.wavenum
+            case 'separation_distance':
+                return self.separation
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _set_param_value(self, param_name, param_value):
+        match param_name:
+            case 'amplitude':
+                self.amp = param_value
+            case 'attenuation':
+                self.attenuation = param_value
+            case 'wave_number':
+                self.wavenum = param_value
+            case 'separation_distance':
+                self.separation = param_value
+            case _:
+                raise ValueError(f'Unknown parameter name {param_name}')  
+
+    def _get_name(self):
+        return "Signal object which generates a simple transmission signal"    

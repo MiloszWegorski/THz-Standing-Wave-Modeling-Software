@@ -1,11 +1,11 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from analysis_tools.dependencies import BaseClass
+from tools.dependencies import BaseClass
 
 from Signal_source.Fitter import complex_to_mag_and_phase
-from analysis_tools.Save_as_file import Mag_and_phase_to_complex
+from tools.Save_as_file import Mag_and_phase_to_complex
 
-from analysis_tools.dependencies import get_wavenums, create_coeff_list, create_component_list
+from tools.dependencies import get_wavenums, create_coeff_list, create_component_list
 
 
 class Sweep_Signal(BaseClass):

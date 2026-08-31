@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-from analysis_tools.dependencies import *
+from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
 from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
@@ -259,29 +259,3 @@ class Analyze_Scheme(BaseClass):
     def _get_name(self):
         return f'This class is used for testing measurement schemes and determining \
             whether the scheme tested is viable for a given measurement'
-
-# seed = random.seed(576429)
-np.random.seed(2000000)
-
-#------------------------Simulate Measurements--------------------------------#
-
-# N = 2
-# M = 2
-
-test_scheme = UniformMeasurement(-10, 10, 20)
-
-freqs = [5]
-
-amps = [20+10j, 10+30j, 10+10J,15+10j]
-
-real_amps, phases = complex_to_mag_and_phase(np.array(amps))
-
-# result = simulateHornFreqSweep(freqs, 1000, test_scheme, 2, 4, True, 0.04, 0.05)
-
-scheme_analyzer = Analyze_Scheme(50000, 0.01, 0.02, 0.05, real_amps)
-
-scheme_analyzer.frequency_sweep(2, 2, True, test_scheme, freqs)
-
-
-
-print()

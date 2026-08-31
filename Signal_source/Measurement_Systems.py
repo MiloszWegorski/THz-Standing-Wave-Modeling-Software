@@ -1,5 +1,5 @@
 import numpy as np
-from analysis_tools.dependencies import BaseClass
+from tools.dependencies import BaseClass
 
 class MeasurementSystem(BaseClass):
     """_summary_
@@ -59,7 +59,7 @@ class MeasurementSystem(BaseClass):
 class FreqSignalMeasurementSystem(BaseClass):
     """_summary_
     """
-    def __init__(self, scheme, signal):
+    def __init__(self,* ,  scheme, signal):
         """_summary_
 
         Args:
@@ -77,7 +77,7 @@ class FreqSignalMeasurementSystem(BaseClass):
             _type_: _description_
         """
         
-        return [np.array(self.scheme.get_points()), np.array(self.signal.get_amplitudes(freq, self.scheme, noiseless=noiseless))]
+        return [self.scheme.get_points(), self.signal.get_amplitudes(freq, self.scheme, noiseless=noiseless)]
         #add get variables method
     
     def _get_name(self):

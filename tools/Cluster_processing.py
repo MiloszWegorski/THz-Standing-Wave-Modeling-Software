@@ -4,13 +4,13 @@ import numpy as np
 import time
 from tqdm import tqdm
 
-from analysis_tools.dependencies import *
+from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
 from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, SimpleTransmittedSignal, get_wavenums, create_coeff_list
 from Signal_source.Measurement_Systems import MeasurementSystem, FreqSignalMeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter
-from analysis_tools.Save_as_file import Save_simulation
+from tools.Save_as_file import Save_simulation
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -38,7 +38,7 @@ def create_comp_lists(comp_list, trans, Measure_scheme, frequencies):
 
 #-----------------------------------------------------------------------------#
 
-def simulate_given_signal(num_simulations, freq, Signal, measure_scheme, comp_list):
+def simulate_given_signal(*, num_simulations, freq, Signal, measure_scheme, comp_list):
         #start time
     time_taken = time.time()
 
@@ -47,7 +47,6 @@ def simulate_given_signal(num_simulations, freq, Signal, measure_scheme, comp_li
     
     measure_syst = FreqSignalMeasurementSystem(measure_scheme, Signal)
 
-    coeffs = create_coeff_list(comp_list, measure_scheme, get_wavenums(freq))
 
     #fitter which is used to fit the data
     fitter = HornTransmissionFitter(components=comp_list)
@@ -61,20 +60,20 @@ def simulate_given_signal(num_simulations, freq, Signal, measure_scheme, comp_li
         data = measure_syst.Measure(freq)
 
         fitted_params[i] = fitter.fit_points(Amplitudes=data[1], freq=freq, scheme=measure_scheme)
-        
+                
     #take end time and take away start time
     time_taken = time.time() - time_taken
 
     return fitted_params, num_simulations/time_taken
 
-def multithread_tasks_given_signal(*, foldername, filename, num_simulations, freqs, 
-                                 coeff_list, Measure_scheme, Signal, Amp_noise, 
-                                 Phase_noise):
+def multithread_tasks_given_signal(*, folder_name, file_name, num_simulations, freqs, 
+                                 comp_list, measure_scheme, Signal, amp_noise, 
+                                 phase_noise):
     
 
     time_start = time.time()
 
-    results = np.empty((len(freqs), num_simulations, len(coeff_list)), dtype=complex)
+    results = np.empty((len(freqs), num_simulations, len(comp_list)), dtype=complex)
     result_times = np.empty(len(freqs), dtype=float)
 
     with ProcessPoolExecutor() as executor:
@@ -82,13 +81,11 @@ def multithread_tasks_given_signal(*, foldername, filename, num_simulations, fre
         futures = {
             executor.submit(
                 simulate_given_signal,
-                num_simulations,
-                freq,
-                Signal,
-                Measure_scheme,
-                coeff_list,
-                Amp_noise,
-                Phase_noise
+                num_simulations=num_simulations,
+                freq=freq,
+                Signal=Signal,
+                measure_scheme=measure_scheme,
+                comp_list=comp_list
             ): i
             for i, freq in enumerate(freqs)
         }
@@ -129,12 +126,12 @@ def multithread_tasks_given_signal(*, foldername, filename, num_simulations, fre
             counter += 1
             
 
-    saver = Save_simulation(foldername,filename)
+    saver = Save_simulation(folder_name,file_name)
     saver.save_data(result_table, column_names, [num_simulations, 
-                                                 coeff_list,
-                                                 Measure_scheme,
+                                                 comp_list,
+                                                 measure_scheme,
                                                  amps,
-                                                 Amp_noise, 
-                                                 Phase_noise])
+                                                 amp_noise, 
+                                                 phase_noise])
 
     return result_table, time_tot

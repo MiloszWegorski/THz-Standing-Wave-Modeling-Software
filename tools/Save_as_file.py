@@ -2,8 +2,8 @@ import numpy as np
 import re
 import pandas as pd
 import zipfile
-
-from analysis_tools.dependencies import complex_to_mag_and_phase, Mag_and_phase_to_complex
+import xml.etree.ElementTree as ET
+from tools.dependencies import complex_to_mag_and_phase, Mag_and_phase_to_complex
 
 def format_number_with_pn_for_sign(x, num_decimals = 3):
     
@@ -31,6 +31,101 @@ def deformat_number_with_pn_for_sign(number):
 
             return float(number)
 
+def get_s_parameters(parsed_xml):
+    
+    s_params = {}
+
+    for i in ['S11', 'S22', 'S21', 'S12', 'Magn.', 'Imag', 'Phase', 'Real']:      
+        s_params.update({i : bool(parsed_xml['Cluster']['Cluster'][0]['Cluster'][i])})
+
+    return s_params
+
+def get_all_axis_point_nums(parsed_xml):
+    
+    scan_lengths = []
+
+    for i, data in enumerate(parsed_xml['Cluster']['Cluster'][1]["Array"]):
+        if i > 0: 
+            if type(data['Cluster']) in (np.ndarray, list):
+                for z in data['Cluster']:
+                    scan_lengths.append(z["Points"])
+            else: 
+                scan_lengths.append(data['Cluster']['Points'])
+
+    return np.asanyarray(scan_lengths)
+
+def clean_tag(tag):
+    # split the tag removing the link inside it
+    return tag.split('}')[-1]
+
+
+def convert_value(text):
+    #remove tabulations or spaces
+    text = (text or "").strip()
+
+    #try convert to int then float and if both fail string
+    try:
+        return int(text)
+    except ValueError:
+        try:
+            return float(text)
+        except ValueError:
+            return text
+
+def parse_element(element):
+    #get tag of branch
+    tag = clean_tag(element.tag)
+    #get all children of branch
+    children = list(element)
+
+    name = None
+    value = None
+
+    
+    for child in children:
+        child_tag = clean_tag(child.tag)
+        if child_tag == "Name":
+            name = (child.text or "").strip()
+        elif child_tag == "Val":
+            value = convert_value(child.text)
+
+    if name is not None and value is not None:
+        return name, value
+
+    # If the tree branch has children aka. is not the end node  we need to go
+    # all the way till a value is found for all children
+    if children:
+        result = {}
+
+        for child in children:
+            # pass child to be parsed this will dig all the way until it 
+            # finds a value
+            parsed = parse_element(child)
+
+            # in case value returned is None
+            if parsed is None:
+                continue
+
+            key, val = parsed
+
+            # This handles elements with more than two items aka one which is
+            # not just a Name and value
+            if key in result:
+                if isinstance(result[key], list):
+                    result[key].append(val)
+                else:
+                    result[key] = [result[key], val]
+            else:
+                result[key] = val
+
+        return tag, result
+
+    # in case there is a leaf element on a branch
+    text = (element.text or "").strip()
+    if text:
+        return tag, convert_value(text)
+
+    return None
 
 class Save_to_file():
 
@@ -90,24 +185,63 @@ class Save_to_file():
 
 class Read_File():
 
-    def __init__(self, folder_name, index_measurements = False,):
-        
+    def __init__(self, folder_name, repeat_axis, index_measurements = False):
+
+        self.xml = self.load_xml(folder_name)
+
         self.freqs = None
         self.dist = None
+        self.sqashed_positions = None
 
         self.folder_name = folder_name
 
         self.index_measurements = index_measurements
+        self.num_dimensions = None
 
-        self.S11 = None
-        self.S12 = None
-        self.S21 = None
-        self.S22 = None
+        self.S11 = []
+        self.S12 = []
+        self.S21 = []
+        self.S22 = []
 
 
-        self.load_data(folder_name)
+        self.load_data(folder_name, repeat_ax_index=repeat_axis)
 
-    def load_data(self, folder_name):
+
+    def load_xml(self, folder):
+
+        """Loads in XML file contained within the data file
+
+        Returns:
+            _type_: _description_
+        """
+
+        with zipfile.ZipFile(folder) as zip:
+            
+            file_names = zip.namelist()
+            
+            xml_data = None
+
+            #search for xml and parse it
+            for file_name in file_names:
+
+                if '.xml' in file_name:
+                    with zip.open(file_name) as xml_file:
+                        xml_data = ET.parse(xml_file)
+
+                    root = xml_data.getroot()
+
+                    data = parse_element(root)
+
+                    final_result = data[1] if data else {}
+                    break
+            
+            if final_result == None:
+                print('Data file does not contain XML file')
+            
+        return final_result
+    
+
+    def load_data(self, folder_name, repeat_ax_index, index_measurement=False):
 
         frequencies = []
         component_measurements = []
@@ -122,13 +256,9 @@ class Read_File():
                 file_names[i] = names.replace(f'{folder_name.replace('zip', '')}/', '')
 
 
-            self.dist = np.empty(len(zip_file.namelist()), dtype=list)
+            self.dist = np.empty(len(zip_file.namelist())-2, dtype=list)
 
-            for i in range(len(zip_file.namelist())):
-                self.dist[i] = []
-
-
-            for i, name in enumerate(np.sort(zip_file.namelist())):
+            for i, name in enumerate(np.sort(zip_file.namelist())[1:]):
                 
                 if '.xml' in name:
                     continue
@@ -137,16 +267,16 @@ class Read_File():
                 #this happens up to twice (im not sure why it happens)
                 name_components = re.findall(r"(.*)_(\d{4})((_\d+[np]\d+)+)", name)[0]
 
-
                 #get index of measurement number
                 index_of_measurement_num = int(name_components[1])
                 
-                axis_positions = [deformat_number_with_pn_for_sign(i) for i in name_components[2].split('_')[1:]]
+                axis_positions = tuple([deformat_number_with_pn_for_sign(i) for i in name_components[-2].split('_')[1:]])
 
-                
+                #get number of dimensions in measurement
+                self.num_dimensions = len(axis_positions)
+
                 #axis num refers to x, y z axis as 1, 2, 3 respectively
-                for pos in axis_positions:
-                    self.dist[i].append(pos)
+                self.dist[i] = axis_positions
 
                 if self.index_measurements:
                     self.dist[i].append(index_of_measurement_num)
@@ -165,118 +295,113 @@ class Read_File():
                     # appending the frequencies
                     frequencies = measurement_data[keys[0]]
 
-                    for j, comp in enumerate(range(1, len(keys)-1, 2)):
-                        comp_name = keys[comp].replace('Mag[dB]', '')
-                        if i == 0:
-                            comp_order.append(comp_name)
 
-                        complex_comp = Mag_and_phase_to_complex(measurement_data[keys[comp]],
-                                                                measurement_data[keys[comp+1]])
+
+
+                    for comp in keys:
                         
-                        component_measurements[j].append(complex_comp)
+                        # compile S11 component
+                        if 'S11Mag' in comp:
+                            comp_order.append('S11')
 
-        self.freqs = np.array(frequencies)
+                            self.S11.append(Mag_and_phase_to_complex(measurement_data['S11Mag[dB]'],
+                                                                measurement_data['S11Phase[deg]']))
+                            
+                        if  'S12Mag' in comp:
+                            comp_order.append('S12')
 
-        for name, values in zip(comp_order, component_measurements):
+                            self.S12.append(Mag_and_phase_to_complex(measurement_data['S12Mag[dB]'],
+                                                                measurement_data['S12Phase[deg]']))
+                        
+                        if  'S21Mag' in comp:
+                            comp_order.append('S21')
 
-            match name:
-                case 'S11':
-                    self.S11 = np.rot90(np.array(values))
-                case 'S21':
-                    self.S21 = np.rot90(np.array(values))
-                case 'S22':
-                    self.S22 = np.rot90(np.array(values))
-                case 'S12':
-                    self.S12 = np.rot90(np.array(values))
-                case _:
-                    print('couldnt match case')
+                            self.S21.append(Mag_and_phase_to_complex(measurement_data['S21Mag[dB]'],
+                                                                measurement_data['S21Phase[deg]']))
+
+                        if  'S22Mag' in comp:
+                            comp_order.append('S22')
+
+                            self.S22.append(Mag_and_phase_to_complex(measurement_data['S22Mag[dB]'],
+                                                                measurement_data['S22Phase[deg]']))
 
 
-    def get_data(self, component, frequencies = None, distances = None):
+
+                        # comp_name = keys[comp].replace('Mag[dB]', '')
+                        # if i == 0:
+                        #     comp_order.append(comp_name)
+
+                        # complex_comp = Mag_and_phase_to_complex(measurement_data[keys[comp]],
+                        #                                         measurement_data[keys[comp+1]])
+                        
+                        # component_measurements[j].append(complex_comp)
+
+        self.freqs = np.asarray(frequencies)
+
+        #if there is more dimensions than one in measurement clean up the array
+        # into a cleaner data structure where
+        # for a 2d case:
+        # [[set of coordinates], [repeat axis]]
+        axis_lengths = get_all_axis_point_nums(self.xml)
         
-        return_scalar_freq = False
-        return_scalar_dist = False
+        shape = np.append(np.delete(axis_lengths, repeat_ax_index), axis_lengths[repeat_ax_index])
 
-        if not np.iterable(frequencies) and type(frequencies) != type(None):
-            frequencies = [frequencies]
-            return_scalar_freq = True
+        shape_distances = np.append(shape, 2)
 
-        if not np.iterable(distances) and type(distances) != type(None):
-            distances = [distances]
-            return_scalar_dist = True
+        shape_measurement = np.append(shape, len(frequencies))
 
-        match component:
-            case 'S11':
-                if type(self.S11) == type(None):
-                    raise ValueError('Component not measured')
-                else:
-                    comp = self.S11
-            case 'S21':
-                if type(self.S21) == type(None):
-                    raise ValueError('Component not measured')
-                else:
-                    comp = self.S21
-            case 'S22':
+        self.dist = self.reshape_scan(data=np.stack(self.dist), shape=shape_distances)
+        
 
-                if type(self.S22) == type(None):
-                    raise ValueError('Component not measured')
-                comp = self.S22
-            case 'S12':
-                if type(self.S12) == type(None):
-                    raise ValueError('Component not measured')
-                else:
-                    comp = self.S12
+        self.sqashed_positions = self.dist.mean(axis=len(axis_lengths)-1)
 
 
-        if type(frequencies) != type(None):
-            
-            #freq_indexes = [np.where(self.freqs == i,) for i in frequencies]
-            
-            freq_indexes = np.empty(len(frequencies), dtype=int)
+        if 'S11' in comp_order:
+            self.S11 = self.reshape_scan(data=self.S11, shape=shape_measurement)
+        if 'S12' in comp_order:
+            self.S12 = self.reshape_scan(data=self.S12, shape=shape_measurement)
+        if 'S21' in comp_order:
+            self.S21 = self.reshape_scan(data=self.S21, shape=shape_measurement)
+        if 'S22' in comp_order:
+            self.S22 = self.reshape_scan(data=self.S22, shape=shape_measurement)
 
-            for i, freq in enumerate(self.freqs):
-                for j, freq_search in enumerate(frequencies):
-                    if freq == freq_search:
-                        freq_indexes[j] = i
-                        #stop the loop when the first index is found
-                        break
 
-            
-            return_array = np.empty(len(freq_indexes))
-            
-            return_array = np.array(comp)[freq_indexes]
-
-        else:
-            return_array = comp            
-
-        if type(distances) != type(None):
-
-            distance_indexes = np.empty(len(distances), dtype=int)
-
-            for i, distance in enumerate(self.dist):
-                for j, dist_search in enumerate(distances):
-                    if distance == dist_search:
-                        distance_indexes[j] = i
-                        #stop this loop when the first index is found
-                        break
-
-            return_array = return_array[:, distance_indexes]
-
-        if return_scalar_freq:
-            return_array = return_array[0]
-            if return_scalar_dist:
-                return_array = return_array[0]
-
-        elif return_scalar_dist:
-            return_array = return_array[:, 0]
-
-        return return_array
+    def get_data(self,*, S_parameter, freqs = None, distances = None):
     
+        measurement = None
+
+        if freqs == None:
+            if distances == None:
+                if S_parameter == 'S11':
+                    return np.asarray([self.S11, self.get_distances()])
+                elif S_parameter == 'S12':
+                    return np.asarray([self.S12, self.get_distances()])
+                elif S_parameter == 'S21':
+                    return np.asarray([self.S21, self.get_distances()])
+                elif S_parameter == 'S22':
+                    return np.asarray([self.S22, self.get_distances()])
+                else: 
+                    raise Exception('Please provide a valid S parameter')
+
+            else:
+
+
+            #idea is to select the distances to be returned and return 
+            # the whole scan for that position
+                pass
+
+    def center_data_points(self, *, scheme):
+
+        return scheme - np.mean(scheme)
+
+    def reshape_scan(self, *,data, shape):
+        return np.asarray(data).reshape(shape)
+
     def get_frequencies(self):
-        return np.array(self.freqs)
+        return self.freqs
     
     def get_distances(self):
-        return np.array(self.dist)
+        return np.squeeze(self.dist)
 
 
 class Save_simulation():

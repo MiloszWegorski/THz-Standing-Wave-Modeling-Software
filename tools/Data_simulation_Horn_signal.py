@@ -3,137 +3,69 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-from analysis_tools.dependencies import *
+from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
-from Signal_source.Measurement_Systems import MeasurementSystem
+from Signal_source.Model_signals import HornSignal, NoisyComplexSignal
+from Signal_source.Measurement_Systems import FreqSignalMeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter, complex_to_mag_and_phase
 
-def simulateHornFreqSweep(frequency, num_trails, Measurement_scheme, N, M, Transmission, amplitude_noise, phase_noise, tolerance):
-
-
-    #generate array to store simulation parameters
-    complex_simulated_params = np.zeros(N*M, dtype=complex)
-
-
-    #generate random parameters with values ranging from 0 - 1 in phase and mag
-    for i in range(N*M):
-        complex_simulated_params[i] = np.power(10, 1) *np.random.normal(0, 1)
-
-    #signal object to generate simulated measurement
-    signal = NoisyComplexSignal(HornSignal(frequency, N, M, Transmission, complex_simulated_params), amplitude_noise, phase_noise)
-
-    # signal = HornSignal(frequency_range[0], N, M, Transmission, complex_simulated_params)
+def simulateHornFreqSweep(freqs, signal, num_trails, Measurement_scheme, tolerance, components):
 
     #measurement scheme to retrieve data for given measurement scheme
-    measureSystem = MeasurementSystem(Measurement_scheme, signal)
+    measureSystem = FreqSignalMeasurementSystem(scheme=Measurement_scheme, signal=signal)
 
     #fitter to fit simulated data
-    fitter = HornTransmissionFitter(frequency,  N, M, Transmission)
+    fitter = HornTransmissionFitter(components=components)
 
-    result_array = []
 
-    for j, freq in enumerate(frequency):
+    result_array = np.empty((len(freqs), num_trails, len(components)), dtype=complex)
 
-        #set frequency for measurement system and fitter to current freq
-        measureSystem.set_param_value('wavenum', get_wavenums(freq))
-        fitter.set_param_values('frequency', freq)
+    for j, freq in enumerate(freqs):
 
         #create array to store the fitted parameters
-        fit_params = np.zeros(num_trails, dtype=list)
+        fit_params = np.zeros((num_trails, len(components)), dtype=list)
 
         for i in range(num_trails):
             #generate simulated data
-            sim_data = measureSystem.Measure()
+            sim_data = measureSystem.Measure(freq=freq)
 
             #store fitted parameters
-            fit_params[i] = fitter.fit_points(sim_data)
+            fit_params[i] = fitter.fit_points(Amplitudes=sim_data[1], freq=freq,scheme=Measurement_scheme)
 
         #add results to a 2d array to store
-        result_array.append(fit_params)
-    
-    #analysis of monte carlo results
+        result_array[j] = fit_params
 
-    simulated_params_mag = []
-    simulated_params_pha = []
-    
-    for i in result_array:
-        temp_mag = []
-        temp_pha = []
-        for j in i:
-            mag , pha = complex_to_mag_and_phase(j)
+    stdevs = np.empty(len(freqs), dtype=float)
 
-            temp_pha.append(pha)
-            temp_mag.append(mag)
+    result_mags, result_pha = complex_to_mag_and_phase(result_array)
 
-        simulated_params_mag.append(temp_mag)
-        simulated_params_pha.append(temp_pha)
-    
-    simulated_params_mag = np.array(simulated_params_mag)
-    simulated_params_pha = np.array(simulated_params_pha)
+    for i, results in enumerate(result_array):
 
-    mags, phas = complex_to_mag_and_phase(complex_simulated_params)
+        result_mag, results_pha = complex_to_mag_and_phase(results[:, 0])
 
-    fit_quality = 0
-    percent_errors_pha = []
-    percent_errors_mag = []
+        stdevs[i] = np.std(result_mag)
 
-    for simulation in simulated_params_mag:
-
-        for j, param_values in enumerate(np.transpose(simulation)):
-
-            percent_errors_mag.append(1-(param_values/mags[j]))
-
-            fit_qual = sum(percent_errors_mag[j] > tolerance)
-            if fit_qual > fit_quality:
-                fit_quality = fit_qual 
-    
-    for simulation in simulated_params_pha:
-
-        for j, param_values in enumerate(np.transpose(simulation)):
-
-            percent_errors_pha.append(1-(param_values/phas[j]))
-
-            fit_qual = sum(percent_errors_pha[j] > tolerance)
-            if fit_qual > fit_quality:
-                fit_quality = fit_qual 
-    
-
-
-    for i in percent_errors_mag:
-        plt.figure()
-        plt.hist(i, bins=100)
-    plt.show()
-
-    for i in percent_errors_pha:
-        plt.figure()
-        plt.hist(i, bins=100)
-    plt.show()
-
-    return fit_quality
+    return stdevs, result_mags, result_pha
 
 
 class Analyze_Scheme(BaseClass):
 
-    def __init__(self, Num_trails, Phase_noise, Amplitude_noise, tolerance, real_amps):
+    def __init__(self, Num_trails, tolerance):
         
         self.num_trails = Num_trails
-        self.phase_noise = Phase_noise
-        self.amp_noise = Amplitude_noise
-
         self.tolerance = tolerance
-        self.real_amps = real_amps
 
 
-    def SimulateHornMeasurement(self, N, M, measurement_scheme, coeff_matrix, freq):
+    def SimulateHornMeasurement(self, signal, measurement_scheme, component_matrix, freq):
 
         #create measurement system to allow for repeated simulated measurements
-        signal = NoisyComplexSignal(HornSignal(coeff_matrix), self.amp_noise, self.phase_noise)
         system = MeasurementSystem(measurement_scheme, signal)
 
         # Create fitter for measurement
-        fitter = HornTransmissionFitter(coeff_matrix)
+        fitter = HornTransmissionFitter(component_matrix)
+
+        N, M = get_M_and_N(component_matrix)
         
         result_params = np.empty((self.num_trails, N*M), dtype=complex)
 
@@ -161,7 +93,7 @@ class Analyze_Scheme(BaseClass):
         mins = np.empty(len(result_amps[0]), dtype=float)
         maxs = np.empty(len(result_amps[0]), dtype=float)
 
-        for i, comp in enumerate(coeff_matrix):
+        for i, comp in enumerate(component_matrix):
             amplitude, phase = complex_to_mag_and_phase(comp[2])
 
             amp_upper_limit = amplitude * (1 + self.tolerance)
@@ -186,9 +118,11 @@ class Analyze_Scheme(BaseClass):
 
 
         mag_variance = {np.var(std_mags)*100}
+        print(f'magnitude variance = {mag_variance}')
         phase_variance = {np.var(std_phase)*100}
+        print(f'phase variance = {phase_variance}')
 
-        amp, phase = complex_to_mag_and_phase(coeff_matrix[0][2])
+        amp, phase = complex_to_mag_and_phase(component_matrix[0][2])
 
 
         

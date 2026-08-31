@@ -6,10 +6,10 @@ from PySide6.QtCore import QFile, QIODevice
 
 from Signal_source.Measurement_schemes import UniformMeasurement, LogMeasurement, RandomizedUniformMeasurement
 
-from analysis_tools.effective_rank import get_effective_rank
-from matrix_window import MatrixWindow
+from tools.effective_rank_modeling import compute_SVD
+from tools.matrix_window import MatrixWindow
 
-from Measurement_tools.Libre_measurements import libre_vna_measurement
+from tools.Libre_measurements import libre_vna_measurement
 
 
 class MainWindow(QWidget):
@@ -18,7 +18,7 @@ class MainWindow(QWidget):
         super().__init__()
 
         # Load the .ui file
-        ui_file_name = "Main_Input.ui"
+        ui_file_name = "tools/Main_Input.ui"
         ui_file = QFile(ui_file_name)
 
         if not ui_file.open(QIODevice.ReadOnly):

@@ -1,12 +1,13 @@
-from Signal_source.Measurement_Systems import MeasurementSystem
+from Signal_source.Measurement_Systems import MeasurementSystem,FreqSignalMeasurementSystem
+from Signal_source. Fitter import HornTransmissionFitter
+
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
+from tqdm import tqdm
 import time
-from analysis_tools.dependencies import *
+from tools.dependencies import *
 
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
-from Signal_source.Measurement_Systems import MeasurementSystem
+from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums
 from Signal_source.Fitter import HornTransmissionFitter, complex_to_mag_and_phase
 
 
@@ -154,16 +155,7 @@ def sweep_variable(monte_carlo, num_trails:int ,scheme , model_signal,
 
     measure_device = MeasurementSystem(scheme, model_signal)
     
-    for count, i in enumerate(sweep_range):
-        
-        percent = count/value_range[2]
-
-        filled = int(40 * percent)
-
-        bar = '█' * filled + '-' * (40-filled)
-
-        sys.stdout.write(f'\r{'Measuring '}|{bar}|{percent*100:.1f}%')
-        sys.stdout.flush()
+    for i in tqdm(sweep_range):
 
         measure_device.set_param_value(sweep_variable, i)
         measure_device.set_param_value('num_points', int(i* 150))
@@ -193,6 +185,50 @@ def sweep_variable(monte_carlo, num_trails:int ,scheme , model_signal,
     ax2[1][0].plot(sweep_range, result_values['offset'])
     ax2[1][1].set_title('Phase')
     ax2[1][1].plot(sweep_range, result_values['phase_res'])
+
+    plt.show()
+
+def compare_model_monte_carlo_analysis(*, num_trails : int, 
+                         measurement_system: FreqSignalMeasurementSystem,
+                         measurement_schemes, freq, models):
+
+    results_full = []
+
+    for i, (model, scheme) in tqdm(enumerate(zip(models, measurement_schemes))):
+
+        results = np.empty((num_trails, len(model)), dtype=complex)
+        fitter = HornTransmissionFitter(components=model)
+
+        for j in tqdm(range(num_trails)):
+            measurement = measurement_system.Measure(freq=freq)
+
+            fit = fitter.fit_points(Amplitudes=measurement[1], freq=freq,
+                                    scheme=scheme)
+
+            results[j] = fit
+
+
+        results_full.append(results)
+
+    model_1_amps, model_1_pha = complex_to_mag_and_phase(results_full[0])
+    model_2_amps, model_2_pha = complex_to_mag_and_phase(results_full[1])
+
+    stdev = np.std
+
+    fig2, ax2 = plt.subplots(2, 2, figsize=(5.12*3, 2.88*3))
+
+    #model 1 amp
+    ax2[0][0].set_title('Model 1 Amplitude', fontsize=17)
+    ax2[0][0].hist(model_1_amps[:, 0])
+
+    ax2[1][0].set_title('Model 2 Amplitude', fontsize=17)
+    ax2[1][0].hist(model_2_amps[:, 0])
+
+    ax2[0][1].set_title('Model 1 Phase', fontsize=17)
+    ax2[0][1].hist(model_1_pha[:, 0])
+
+    ax2[1][1].set_title('Model 2 Phase', fontsize=17)
+    ax2[1][1].hist(model_2_pha[:, 0])
 
     plt.show()
 
@@ -289,7 +325,7 @@ class Analyze_Scheme(BaseClass):
         results = []
 
         for i in freqs:
-            coeffs = create_coeff_list(M, N, transmission, measurement_scheme.get_points(), get_wavenums(i))
+            coeffs = 0#create_coeff_list(M, N, transmission, measurement_scheme.get_points(), get_wavenums(i))
 
             result = self.SimulateHornMeasurement(N, M, measurement_scheme, coeffs, i)
 

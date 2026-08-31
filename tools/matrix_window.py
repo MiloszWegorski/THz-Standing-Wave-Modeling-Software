@@ -4,7 +4,7 @@ import numpy as np
 from Signal_source.Measurement_schemes import UniformMeasurement, LogMeasurement, RandomizedUniformMeasurement
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout
-from analysis_tools.effective_rank import get_effective_rank
+from tools.effective_rank_modeling import compute_SVD
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -32,7 +32,7 @@ class MatrixWindow(QWidget):
         self.effective_rank_plot = MatrixCanvas(parent=self, width=5, height=4, dpi=100, plots=(1, 2))
 
 
-        effective_rank, matrix = get_effective_rank(freq=freq, measurement_scheme=measure_scheme)
+        effective_rank, matrix = compute_SVD(freq=freq, measurement_scheme=measure_scheme)
 
         def P(A): 
             return np.abs(A)

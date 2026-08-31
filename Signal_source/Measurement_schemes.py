@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 from abc import ABC, abstractmethod
-from analysis_tools.dependencies import BaseClass
+from tools.dependencies import BaseClass
 
 
 class MeasurementScheme(BaseClass):
@@ -25,7 +25,7 @@ class UniformMeasurement(MeasurementScheme):
  with {num_points} points"
 
     def _get_points(self):
-        return np.array(np.linspace(self.start_position, self.end_position, self.num_points))
+        return np.linspace(self.start_position, self.end_position, self.num_points)
     
     def _get_name(self):
         return self.name

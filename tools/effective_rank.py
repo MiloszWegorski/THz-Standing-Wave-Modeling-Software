@@ -34,7 +34,6 @@ def compute_SVD(*, freq, measurement_scheme, components):
     return (U, S, np.flip(Vh, axis=0))
 
 
-
 def get_s_filter_sum(S, limit):
 
     S_normalized = S/sum(S)

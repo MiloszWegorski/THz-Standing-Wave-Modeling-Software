@@ -213,23 +213,104 @@ def compare_model_monte_carlo_analysis(*, num_trails : int,
     model_1_amps, model_1_pha = complex_to_mag_and_phase(results_full[0])
     model_2_amps, model_2_pha = complex_to_mag_and_phase(results_full[1])
 
-    stdev = np.std
+    stdev_model_1_amps = np.std(model_1_amps[:, 0])
+    average_model_1_amps = np.average(model_1_amps[:, 0])
+
+    stdev_model_1_pha = np.std(model_1_pha[:, 0])
+    average_model_1_pha = np.average(model_1_pha[:, 0])
+
+    stdev_model_2_amps = np.std(model_2_amps[:, 0])
+    average_model_2_amps = np.average(model_2_amps[:, 0])
+
+    stdev_model_2_pha = np.std(model_2_pha[:, 0])
+    average_model_2_pha = np.average(model_2_pha[:, 0])
 
     fig2, ax2 = plt.subplots(2, 2, figsize=(5.12*3, 2.88*3))
 
-    #model 1 amp
+    #--------------------model 1 amp------------------------------------------#
     ax2[0][0].set_title('Model 1 Amplitude', fontsize=17)
-    ax2[0][0].hist(model_1_amps[:, 0])
+    ax2[0][0].hist(model_1_amps[:, 0], bins=50)
+    ax2[0][0].set_xlabel('Magnitude (db)',fontsize=15)
 
+    label='Model 1 standard deviation'
+    for x in [average_model_1_amps+stdev_model_1_amps,
+                     average_model_1_amps-stdev_model_1_amps]:
+        ax2[0][0].axvline(x,
+                      color='red', linestyle='--', label=label)
+        label = None
+
+    label='Model 2 standard deviation'
+    for x in [average_model_2_amps+stdev_model_2_amps,
+                     average_model_2_amps-stdev_model_2_amps]:
+        ax2[0][0].axvline(x,
+                     color='green', linestyle='--', label=label)
+        label = None
+
+
+
+    #--------------------model 2 amp------------------------------------------#
     ax2[1][0].set_title('Model 2 Amplitude', fontsize=17)
-    ax2[1][0].hist(model_2_amps[:, 0])
+    ax2[1][0].hist(model_2_amps[:, 0], bins=50)
+    ax2[1][0].set_xlabel('Magnitude (db)',fontsize=15)
 
+    label='Model 1 standard deviation'
+    for x in [average_model_1_amps+stdev_model_1_amps,
+                     average_model_1_amps-stdev_model_1_amps]:
+        ax2[1][0].axvline(x,
+                      color='red', linestyle='--', label=label)
+        label = None
+
+    label='Model 2 standard deviation'
+    for x in [average_model_2_amps+stdev_model_2_amps,
+                     average_model_2_amps-stdev_model_2_amps]:
+        ax2[1][0].axvline(x,
+                     color='green', linestyle='--', label=label)
+        label = None
+
+
+    #--------------------model 1 pha------------------------------------------#
     ax2[0][1].set_title('Model 1 Phase', fontsize=17)
-    ax2[0][1].hist(model_1_pha[:, 0])
+    ax2[0][1].hist(model_1_pha[:, 0], bins=50)
+    ax2[0][1].set_xlabel('Phase (deg)',fontsize=15)
 
+    label='Model 1 standard deviation'
+    for x in [average_model_1_pha+stdev_model_1_pha,
+                     average_model_1_pha-stdev_model_1_pha]:
+        ax2[0][1].axvline(x,
+                      color='red', linestyle='--', label=label)
+        label = None
+
+    label = 'Model 2 standard deviation'
+    for x in [average_model_2_pha+stdev_model_2_pha,
+                     average_model_2_pha-stdev_model_2_pha]:
+        ax2[0][1].axvline(x,
+                     color='green', linestyle='--', label=label)
+        label = None
+
+
+    #--------------------model 2 pha------------------------------------------#
     ax2[1][1].set_title('Model 2 Phase', fontsize=17)
-    ax2[1][1].hist(model_2_pha[:, 0])
+    ax2[1][1].hist(model_2_pha[:, 0], bins=50)
+    ax2[1][1].set_xlabel('Phase (deg)',fontsize=15)
 
+    label='Model 1 standard deviation'
+    for x in [average_model_1_pha+stdev_model_1_pha,
+                     average_model_1_pha-stdev_model_1_pha]:
+        ax2[1][1].axvline(x,
+                      color='red', linestyle='--', label=label)
+        label=None
+
+    label='Model 2 standard deviation'
+    for x in [average_model_2_pha+stdev_model_2_pha,
+                     average_model_2_pha-stdev_model_2_pha]:
+        ax2[1][1].axvline(x,
+                     color='green', linestyle='--',label=label)
+        label=None
+
+    for i in ax2:
+        for j in i:
+            j.legend()
+    plt.subplots_adjust(hspace=0.4)
     plt.show()
 
 

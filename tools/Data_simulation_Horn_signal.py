@@ -18,7 +18,6 @@ def simulateHornFreqSweep(freqs, signal, num_trails, Measurement_scheme, toleran
     #fitter to fit simulated data
     fitter = HornTransmissionFitter(components=components)
 
-
     result_array = np.empty((len(freqs), num_trails, len(components)), dtype=complex)
 
     for j, freq in enumerate(freqs):
@@ -60,7 +59,7 @@ class Analyze_Scheme(BaseClass):
     def SimulateHornMeasurement(self, signal, measurement_scheme, component_matrix, freq):
 
         #create measurement system to allow for repeated simulated measurements
-        system = MeasurementSystem(measurement_scheme, signal)
+        system = FreqSignalMeasurementSystem(measurement_scheme, signal)
 
         # Create fitter for measurement
         fitter = HornTransmissionFitter(component_matrix)

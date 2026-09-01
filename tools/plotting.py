@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -86,21 +87,30 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     fitted_system_1 = FreqSignalMeasurementSystem(scheme=plot_scheme,
                                                 signal=HornSignal(component_matrix=comps, 
                                                                     component_amplitudes=fit))
+
     fitted_data = fitted_system_1.Measure(freq=freq)
 
     fit_mag, fit_pha = complex_to_mag_and_phase(fitted_data[1])
     measured_mag, measured_pha = complex_to_mag_and_phase(measurement[1])
 
+
+    fitted_system_chi = FreqSignalMeasurementSystem(scheme=measure_scheme,
+                                                  signal=HornSignal(component_matrix=comps, 
+                                                                    component_amplitudes=fit))
+    chi_measurement = fitted_system_chi.Measure(freq=freq)
+
+    observed = np.abs(measurement[1])
+    fitted = np.abs(chi_measurement[1])
+
+    chi2 = scipy.stats.chisquare(observed, fitted)
+
+
+    print(chi2)
+
     (U, S, Vh) = compute_SVD(freq=freq, 
                             measurement_scheme=measure_scheme, 
                             components=comps)
 
-    # print(f'{U=}')
-    # print(f'{S=}')
-    # print(sum(S))
-    # print(f'{Vh[0][0]=}')
-
-    #real underlying signal
     real_measurement = plotting_system.Measure(freq=freq, noiseless=True)
 
     real_mag, real_pha = complex_to_mag_and_phase(real_measurement[1])
@@ -121,8 +131,6 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     ax_U = fig.add_subplot(right[0, :])      # spans the whole top
     ax_S = fig.add_subplot(right[1, 0])      # narrow
     ax_Vh = fig.add_subplot(right[1, 1])     # large square
-    
-
     
     fig.suptitle(title)
 

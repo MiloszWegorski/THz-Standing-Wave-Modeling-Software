@@ -3,6 +3,8 @@ from scipy import stats
 from abc import ABC, abstractmethod
 from tools.dependencies import BaseClass
 
+from numpy.random import Generator, PCG64
+
 
 class MeasurementScheme(BaseClass):
     
@@ -57,24 +59,32 @@ class UniformMeasurement(MeasurementScheme):
 
 class RandomizedUniformMeasurement(MeasurementScheme):
 
-    def __init__(self, *, start_position, end_position, num_points, randomization):
+    def __init__(self, *, start_position, end_position, num_points, randomization, seed = None):
         self.start_position = start_position
         self.end_position = end_position
         self.num_points = num_points
         self.randomization_percentage = randomization
 
-        uniform_scheme = np.array(np.linspace(self.start_position, self.end_position, self.num_points))
-
-        step = uniform_scheme[1] - uniform_scheme [0]
-
-        self.randomized_scheme = np.array(uniform_scheme + 
-                            np.random.normal(0.0, step *self.randomization_percentage,
-                                             size=uniform_scheme.shape))
-
+        if seed is None:
+            self.seed = int(np.abs(Generator(PCG64()).standard_normal(size=1)[0]*1e6))
+        else:
+            self.seed = seed
+            
         self.name = f"Uniform distribution from {start_position} to {end_position}\
  with {num_points} points"
 
     def _get_points(self):
+
+        rnd = Generator(PCG64(seed=self.seed))
+
+        uniform_scheme = np.array(np.linspace(self.start_position, self.end_position, self.num_points))
+        
+        step = uniform_scheme[1] - uniform_scheme [0]
+        
+        self.randomized_scheme = np.array(uniform_scheme + 
+                                    rnd.normal(0.0, step *self.randomization_percentage,
+                                                     size=uniform_scheme.shape))
+        
 
         return self.randomized_scheme
     

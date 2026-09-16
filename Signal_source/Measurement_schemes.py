@@ -69,7 +69,7 @@ class RandomizedUniformMeasurement(MeasurementScheme):
             self.seed = int(np.abs(Generator(PCG64()).standard_normal(size=1)[0]*1e6))
         else:
             self.seed = seed
-            
+
         self.name = f"Uniform distribution from {start_position} to {end_position}\
  with {num_points} points"
 
@@ -90,6 +90,9 @@ class RandomizedUniformMeasurement(MeasurementScheme):
     
     def _get_name(self):
         return self.name
+
+    def get_seed(self):
+        return self.seed
     
     def _get_param_value(self, param_name):
         match param_name:

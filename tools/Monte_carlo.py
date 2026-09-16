@@ -1,5 +1,6 @@
 from Signal_source.Measurement_Systems import MeasurementSystem,FreqSignalMeasurementSystem
-from Signal_source. Fitter import HornTransmissionFitter
+from Signal_source.Fitter import HornTransmissionFitter
+from Signal_source.Measurement_schemes import UniformMeasurement
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,7 +8,7 @@ from tqdm import tqdm
 import time
 from tools.dependencies import *
 
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums
+from Signal_source.Model_signals import ModelSignal, NoisyComplexSignal, get_wavenums
 from Signal_source.Fitter import HornTransmissionFitter, complex_to_mag_and_phase
 
 
@@ -23,9 +24,9 @@ def simulateHornFreqSweep(frequency, num_trails, Measurement_scheme, N, M, Trans
         complex_simulated_params[i] = np.power(10, 1) *np.random.normal(0, 1)
 
     #signal object to generate simulated measurement
-    signal = NoisyComplexSignal(HornSignal(frequency, N, M, Transmission, complex_simulated_params), amplitude_noise, phase_noise)
+    signal = NoisyComplexSignal(ModelSignal(frequency, N, M, Transmission, complex_simulated_params), amplitude_noise, phase_noise)
 
-    # signal = HornSignal(frequency_range[0], N, M, Transmission, complex_simulated_params)
+    # signal = ModelSignal(frequency_range[0], N, M, Transmission, complex_simulated_params)
 
     #measurement scheme to retrieve data for given measurement scheme
     measureSystem = MeasurementSystem(Measurement_scheme, signal)
@@ -190,14 +191,29 @@ def sweep_variable(monte_carlo, num_trails:int ,scheme , model_signal,
 
 def compare_model_monte_carlo_analysis(*, num_trails : int, 
                          measurement_system: FreqSignalMeasurementSystem,
-                         measurement_schemes, freq, models):
+                         measurement_schemes, freq, models, erank_accuracy,
+                         model_names):
+
+    #get true values
+    true_scheme = UniformMeasurement(start_position=-10, end_position=10,
+                                     num_points=10000)
+
+    True_system = FreqSignalMeasurementSystem(scheme=true_scheme, signal=measurement_system.signal)
+
+    True_measurement = True_system.Measure(freq=freq, noiseless=True)
+
+    True_fitter = HornTransmissionFitter(components=models[0])
+
+    True_fit = True_fitter.fit_points(Amplitudes=True_measurement[1], freq=freq, scheme=true_scheme)
+    
+    True_mag, True_pha = complex_to_mag_and_phase(True_fit[0])
 
     results_full = []
 
-    for i, (model, scheme) in tqdm(enumerate(zip(models, measurement_schemes))):
+    for i, (model, scheme, erank_acc) in tqdm(enumerate(zip(models, measurement_schemes, erank_accuracy))):
 
         results = np.empty((num_trails, len(model)), dtype=complex)
-        fitter = HornTransmissionFitter(components=model)
+        fitter = HornTransmissionFitter(components=model, erank_accuracy=erank_acc)
 
         for j in tqdm(range(num_trails)):
             measurement = measurement_system.Measure(freq=freq)
@@ -227,19 +243,44 @@ def compare_model_monte_carlo_analysis(*, num_trails : int,
 
     fig2, ax2 = plt.subplots(2, 2, figsize=(5.12*3, 2.88*3))
 
-    #--------------------model 1 amp------------------------------------------#
-    ax2[0][0].set_title('Model 1 Amplitude', fontsize=17)
-    ax2[0][0].hist(model_1_amps[:, 0], bins=50)
-    ax2[0][0].set_xlabel('Magnitude (db)',fontsize=15)
+    for i in ax2:
+        for j in i:
+            j.tick_params(axis='both', which='major', labelsize=18)
 
-    label='Model 1 standard deviation'
+    #--------------------model 1 amp------------------------------------------#
+    ax2[0][0].set_title(f'{model_names[0]} Amplitude', fontsize=21)
+    ax2[0][0].hist(model_1_amps[:, 0], bins=50)
+    ax2[0][0].set_xlabel('Magnitude (db)',fontsize=19)
+
+    ax2[0][0].axvline(True_mag, color='purple', linestyle='--',
+                          label='True Magnitude')
+    ax2[1][0].axvline(True_mag, color='purple', linestyle='--',
+                              label='True Magnitude')
+            
+    ax2[0][1].axvline(True_pha, color='purple', linestyle='--',
+                         label='True phase')
+    ax2[1][1].axvline(True_pha, color='purple', linestyle='--',
+                         label='True phase')
+
+    ax2[0][0].axvline(average_model_1_amps, color='purple', linestyle=':',
+                          label='Mean magnitude model 1')
+    ax2[1][0].axvline(average_model_2_amps, color='purple', linestyle=':',
+                              label='Mean magnitude model 2')
+            
+    ax2[0][1].axvline(average_model_1_pha, color='purple', linestyle=':',
+                         label='Mean phase model 1')
+    ax2[1][1].axvline(average_model_2_pha, color='purple', linestyle=':',
+                         label='Mean phase model 2')
+
+
+    label=f'{model_names[0]} σ'
     for x in [average_model_1_amps+stdev_model_1_amps,
                      average_model_1_amps-stdev_model_1_amps]:
         ax2[0][0].axvline(x,
                       color='red', linestyle='--', label=label)
         label = None
 
-    label='Model 2 standard deviation'
+    label=f'{model_names[1]} σ'
     for x in [average_model_2_amps+stdev_model_2_amps,
                      average_model_2_amps-stdev_model_2_amps]:
         ax2[0][0].axvline(x,
@@ -249,18 +290,18 @@ def compare_model_monte_carlo_analysis(*, num_trails : int,
 
 
     #--------------------model 2 amp------------------------------------------#
-    ax2[1][0].set_title('Model 2 Amplitude', fontsize=17)
+    ax2[1][0].set_title(f'{model_names[1]} Amplitude', fontsize=21)
     ax2[1][0].hist(model_2_amps[:, 0], bins=50)
-    ax2[1][0].set_xlabel('Magnitude (db)',fontsize=15)
+    ax2[1][0].set_xlabel('Magnitude (db)',fontsize=19)
 
-    label='Model 1 standard deviation'
+    label='Model 1 σ'
     for x in [average_model_1_amps+stdev_model_1_amps,
                      average_model_1_amps-stdev_model_1_amps]:
         ax2[1][0].axvline(x,
                       color='red', linestyle='--', label=label)
         label = None
 
-    label='Model 2 standard deviation'
+    label='Model 2 σ'
     for x in [average_model_2_amps+stdev_model_2_amps,
                      average_model_2_amps-stdev_model_2_amps]:
         ax2[1][0].axvline(x,
@@ -269,18 +310,18 @@ def compare_model_monte_carlo_analysis(*, num_trails : int,
 
 
     #--------------------model 1 pha------------------------------------------#
-    ax2[0][1].set_title('Model 1 Phase', fontsize=17)
+    ax2[0][1].set_title(f'{model_names[0]} Phase', fontsize=21)
     ax2[0][1].hist(model_1_pha[:, 0], bins=50)
-    ax2[0][1].set_xlabel('Phase (deg)',fontsize=15)
+    ax2[0][1].set_xlabel('Phase (deg)',fontsize=19)
 
-    label='Model 1 standard deviation'
+    label=f'{model_names[0]} σ'
     for x in [average_model_1_pha+stdev_model_1_pha,
                      average_model_1_pha-stdev_model_1_pha]:
         ax2[0][1].axvline(x,
                       color='red', linestyle='--', label=label)
         label = None
 
-    label = 'Model 2 standard deviation'
+    label = f'{model_names[0]} σ'
     for x in [average_model_2_pha+stdev_model_2_pha,
                      average_model_2_pha-stdev_model_2_pha]:
         ax2[0][1].axvline(x,
@@ -289,27 +330,28 @@ def compare_model_monte_carlo_analysis(*, num_trails : int,
 
 
     #--------------------model 2 pha------------------------------------------#
-    ax2[1][1].set_title('Model 2 Phase', fontsize=17)
+    ax2[1][1].set_title(f'{model_names[1]} Phase', fontsize=21)
     ax2[1][1].hist(model_2_pha[:, 0], bins=50)
-    ax2[1][1].set_xlabel('Phase (deg)',fontsize=15)
+    ax2[1][1].set_xlabel('Phase (deg)',fontsize=19)
 
-    label='Model 1 standard deviation'
+    label=f'{model_names[0]} σ'
     for x in [average_model_1_pha+stdev_model_1_pha,
                      average_model_1_pha-stdev_model_1_pha]:
         ax2[1][1].axvline(x,
                       color='red', linestyle='--', label=label)
         label=None
 
-    label='Model 2 standard deviation'
+    label=f'{model_names[1]} σ'
     for x in [average_model_2_pha+stdev_model_2_pha,
                      average_model_2_pha-stdev_model_2_pha]:
         ax2[1][1].axvline(x,
                      color='green', linestyle='--',label=label)
         label=None
 
-    for i in ax2:
-        for j in i:
-            j.legend()
+ 
+    ax2[1][1].legend(fontsize=17)
+
+
     plt.subplots_adjust(hspace=0.4)
     plt.show()
 
@@ -329,7 +371,7 @@ class Analyze_Scheme(BaseClass):
     def SimulateHornMeasurement(self, N, M, measurement_scheme, coeff_matrix, freq):
 
         #create measurement system to allow for repeated simulated measurements
-        signal = NoisyComplexSignal(HornSignal(coeff_matrix), self.amp_noise, self.phase_noise)
+        signal = NoisyComplexSignal(ModelSignal(coeff_matrix), self.amp_noise, self.phase_noise)
         system = MeasurementSystem(measurement_scheme, signal)
 
         # Create fitter for measurement

@@ -1,6 +1,7 @@
 import scipy.linalg
 from tools.dependencies import *
 import math
+import sys
 import numpy as np
 
 def get_effective_rank(*, S):
@@ -21,11 +22,31 @@ def get_effective_rank(*, S):
     return erank
 
 
-def compute_SVD(*, freq, measurement_scheme, components):
+def get_lowest_rank_by_freq(*, components, freqs, scheme, normalize=True):
+
+    lowest_erank = sys.maxsize
+
+    for f in freqs:
+        (_, S, _) = compute_SVD(freq=f, measurement_scheme=scheme, 
+                                components=components, normalize=normalize)
+
+        effective_rank = get_effective_rank(S=S)
+
+        if effective_rank < lowest_erank:
+            lowest_erank = effective_rank
+
+    return lowest_erank
+
+def compute_SVD(*, freq, measurement_scheme, components, normalize=False):
     
     wavenum = get_wavenums(freq)
-    
-    coeffs = create_coeff_matrix(comp_list=components, 
+
+    if normalize:
+        coeffs = create_legrange_normalized_coeff_list(comp_list=components,
+                                                       scheme=measurement_scheme,
+                                                       wavenum=wavenum)
+    else:
+        coeffs = create_coeff_matrix(comp_list=components, 
                                       scheme=measurement_scheme,
                                       wavenum=wavenum)
     

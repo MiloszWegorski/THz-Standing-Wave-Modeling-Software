@@ -7,7 +7,7 @@ from tqdm import tqdm
 from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, SimpleTransmittedSignal, get_wavenums, create_coeff_list
+from Signal_source.Model_signals import ModelSignal, NoisyComplexSignal, SimpleTransmittedSignal, get_wavenums, create_coeff_list
 from Signal_source.Measurement_Systems import MeasurementSystem, FreqSignalMeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter
 from tools.Save_as_file import Save_simulation

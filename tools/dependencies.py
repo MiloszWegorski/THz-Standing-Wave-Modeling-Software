@@ -155,6 +155,22 @@ def create_coeff_matrix(comp_list, scheme, wavenum):
     
     return np.array(coeff_list).T
 
+def create_legrange_normalized_coeff_list(comp_list, scheme, wavenum):
+    dists = scheme.get_points().squeeze()
+
+
+    coeff_list = np.empty((len(comp_list), len(dists)), dtype=complex)
+
+    dists_norm = dists/np.abs(dists).max()
+
+    for i, (N, M) in enumerate(comp_list):
+        leg = np.polynomial.Legendre(np.concatenate((np.zeros(M),[1])))(dists_norm)
+
+        coeff_list[i] = leg * np.exp(-1j * N * wavenum * dists)
+
+    
+    return np.array(coeff_list).T
+
 def add_N_component(*, comps):
 
     max_N = 0
@@ -185,17 +201,14 @@ def add_M_component(*, comps, M_num):
 
     N, M = get_M_and_N(comps=comps)
 
-    counter = 0
-    z = 1
-
-    comp_prev = (-1, -1)
+    print(N)
 
     N_min = comps[0][0]
 
     for i, comp in enumerate(comps):
         comps_new.append(comp)
 
-    for i in range(N_min, N, 2):
+    for i in range(N_min, N+1, 2):
         comp_add = (i, M_num)
 
         if comp_add not in comps_new:
@@ -204,19 +217,19 @@ def add_M_component(*, comps, M_num):
     return sorted(comps_new)
 
 def get_M_and_N(comps):
-    M_max = 0
-    N_max = 0
-    N_prev = -1
 
-
-    for M in comps:
-        if M[1] > M_max:
-            M_max = M[1]
-
-    for N in comps:
-        if N[0] > N_prev:
-            N_max += 1
-            N_prev = N[0]
-
+    N_max = max([c[0] for c in comps])
+    M_max = max([c[1] for c in comps])
 
     return N_max, M_max
+
+
+def printmodel(*, model):
+
+    prev = model[0][0]
+
+    for i, comp in enumerate(model):
+        if comp[0] > prev:
+            prev = comp[0]
+            print()
+        print(f'{comp},', end='')

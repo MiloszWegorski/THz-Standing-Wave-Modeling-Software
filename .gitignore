@@ -11,3 +11,9 @@ XML_load.py
 read_multi_dimension.py
 antenna_with_silicon_lens_data_processing.py
 plots
+Erank_build_high_number_of_points.ipynb
+erank_test.py
+model_builder_testing.py
+model_normalization_test.ipynb
+SVD_mode_plotting.ipynb
+Toy_model_normalization.ipynb

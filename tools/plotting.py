@@ -6,7 +6,7 @@ from matplotlib.patches import Rectangle
 
 from Signal_source.Fitter import HornTransmissionFitter
 from Signal_source.Measurement_Systems import FreqSignalMeasurementSystem
-from Signal_source.Model_signals import HornSignal
+from Signal_source.Model_signals import ModelSignal
 
 from tools.dependencies import complex_to_mag_and_phase
 from tools.effective_rank_modeling import compute_SVD, truncate_measurement, build_model
@@ -17,7 +17,7 @@ def plot_key_component_scheme(*, models, fits, scheme, freq, title, key_componen
     fig, ax = plt.subplots(ncols=1, nrows=1,figsize=(5.12*3, 2.88*3))
 
     #select component(s) to plot 
-    for model, fit, name in zip(models, fits, fit_names):
+    for  model, fit, name in zip(models, fits, fit_names):
         for i in key_components:
             model = np.asanyarray(model)
 
@@ -28,7 +28,7 @@ def plot_key_component_scheme(*, models, fits, scheme, freq, title, key_componen
 
             #plot the components by creating individual measurement systems
 
-            signal = HornSignal(component_matrix=model_select, component_amplitudes=fit_select)
+            signal = ModelSignal(component_matrix=model_select, component_amplitudes=fit_select)
 
             
             system = FreqSignalMeasurementSystem(scheme=scheme, signal=signal)
@@ -37,12 +37,15 @@ def plot_key_component_scheme(*, models, fits, scheme, freq, title, key_componen
 
             mag, pha = complex_to_mag_and_phase(measurement[1])
 
-            ax.plot(measurement[0], np.abs(measurement[1]), label=f'{name} N = {i}')
-    ax.set_xlabel('Offset distance (mm)', fontsize=17)
-    ax.set_ylabel('Magnitude', fontsize=17)
+            ax.plot(measurement[0], mag, label=f'{name} N = {i}')
+    ax.set_xlabel('Offset distance (mm)', fontsize=21)
+    ax.set_ylabel('Magnitude', fontsize=21)
     ax.set_title(title)
+    ax.set_ybound(upper=1)
+    plt.xticks(fontsize=21)
+    plt.yticks(fontsize=21)
 
-    plt.legend(fontsize=17)
+    plt.legend(fontsize=21, loc='lower left')
     plt.grid()
     plt.show()
 
@@ -77,15 +80,15 @@ def plot_complex_signals(*, measurements : np.ndarray, labels : np.ndarray, titl
 
 def fit_signal(*,measurement_system, freq, measure_scheme,
                 plot_scheme, comps, plotting_system, title='', 
-                limit = False, show_Vh_text, mode_spacing=1, comp_spacing=1):
+                limit = False, show_Vh_text, mode_spacing=1, comp_spacing=1, erank_accuracy_fit=True):
     
     
     measurement = measurement_system.Measure(freq=freq)
-    fitter = HornTransmissionFitter(components=comps)
+    fitter = HornTransmissionFitter(components=comps, erank_accuracy=erank_accuracy_fit)
     fit = fitter.fit_points(Amplitudes=measurement[1], freq=freq, scheme=measure_scheme)
 
     fitted_system_1 = FreqSignalMeasurementSystem(scheme=plot_scheme,
-                                                signal=HornSignal(component_matrix=comps, 
+                                                signal=ModelSignal(component_matrix=comps, 
                                                                     component_amplitudes=fit))
 
     fitted_data = fitted_system_1.Measure(freq=freq)
@@ -94,31 +97,33 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     measured_mag, measured_pha = complex_to_mag_and_phase(measurement[1])
 
 
-    fitted_system_chi = FreqSignalMeasurementSystem(scheme=measure_scheme,
-                                                  signal=HornSignal(component_matrix=comps, 
-                                                                    component_amplitudes=fit))
-    chi_measurement = fitted_system_chi.Measure(freq=freq)
+    # fitted_system_chi = FreqSignalMeasurementSystem(scheme=measure_scheme,
+    #                                               signal=ModelSignal(component_matrix=comps, 
+    #                                                                 component_amplitudes=fit))
+    # chi_measurement = fitted_system_chi.Measure(freq=freq)
 
-    observed = np.abs(measurement[1])
-    fitted = np.abs(chi_measurement[1])
+    # observed = np.abs(measurement[1])
+    # fitted = np.abs(chi_measurement[1])
 
-    chi2 = scipy.stats.chisquare(observed, fitted)
+    # chi2 = scipy.stats.chisquare(observed, fitted)
 
 
-    print(chi2)
+    # print(chi2)
 
     (U, S, Vh) = compute_SVD(freq=freq, 
                             measurement_scheme=measure_scheme, 
-                            components=comps)
+                            components=comps, normalize=True)
 
     real_measurement = plotting_system.Measure(freq=freq, noiseless=True)
 
     real_mag, real_pha = complex_to_mag_and_phase(real_measurement[1])
     
-    fig = plt.figure(figsize=(5.12*3, 2.88*3), constrained_layout=True)
+    fig = plt.figure(figsize=(5.12*3, 2.88*3), constrained_layout=False)
     
-    outer = fig.add_gridspec(2, 2,
-                         width_ratios=[1.1, 2.3])
+    outer = fig.add_gridspec(
+        2, 2,
+        width_ratios=[1.1, 2.3],
+    )
 
     left = outer[:, 0].subgridspec(2, 1)
     right = outer[:, 1].subgridspec(2, 2,
@@ -142,21 +147,21 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     ax_mag.scatter(measurement[0], measured_mag, marker='x', color='r')
     ax_mag.plot(real_measurement[0], real_mag, color='blue', linestyle='--')
     ax_mag.plot(fitted_data[0], fit_mag, color='black')
-    ax_mag.set_title('Magnitude', fontsize=17)
-    ax_mag.tick_params(axis='both', which='major', labelsize=15)
+    ax_mag.set_title('Magnitude', fontsize=21)
+    ax_mag.tick_params(axis='both', which='major', labelsize=19)
 
 
     #plot phase
     ax_phase.scatter(measurement[0], measured_pha, marker='x', color='r')
-    ax_phase.set_ylabel('Phase', fontsize=17)
+    ax_phase.set_ylabel('Phase', fontsize=21)
     ax_phase.plot(real_measurement[0], real_pha, color='blue', linestyle='--')
     ax_phase.plot(fitted_data[0], fit_pha, color='black')
-    ax_phase.set_title('Phase', fontsize=17)
-    ax_phase.tick_params(axis='both', which='major', labelsize=15)
-    ax_phase.set_xlabel("Offset distance (mm)", fontsize=17)
+    ax_phase.set_title('Phase', fontsize=21)
+    ax_phase.tick_params(axis='both', which='major', labelsize=19)
+    ax_phase.set_xlabel("Offset distance (mm)", fontsize=21)
 
     S = (S/S[0])
-    S_sum = (S/sum(S))
+    S = (S/sum(S))
 
     cmap = plt.cm.summer.reversed()
 
@@ -166,7 +171,7 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     prob_modes = []
 
     for (j,i),label in np.ndenumerate(np.abs(np.atleast_2d(S).T)):
-        ax_S.text(i,j,np.round(label, 5),ha='center',va='center', fontsize=17)
+        ax_S.text(i,j,np.round(label, 5),ha='center',va='center', fontsize=15)
         tot += label
         if limit != False:
             if label < limit:
@@ -181,7 +186,7 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
                 ax_S.add_patch(rect)
                 prob_modes.append(j)
 
-    ax_S.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=17)
+    ax_S.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=21)
 
     for tick in ax_S.get_yticklabels():
         tick.set_bbox(dict(
@@ -190,13 +195,14 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
             edgecolor="black",
             linewidth=1.5
         ))
-    ax_S.set_ylabel(f'Model modes', fontsize=17)
-    ax_S.set_title('SVD (Σ/Σ[0])', fontsize=17)
+        
+    ax_S.set_ylabel(f'Model modes', fontsize=21)
+    ax_S.set_title('SVD (Σ/Σ[0])', fontsize=21)
     ax_S.set_xticks([])
 
 
     im_x = ax_U.imshow(np.abs(U).T)#[0:4, -1:-4:-1])
-    ax_U.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=17)
+    ax_U.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=21)
     ax_U.set_xticks(range(len(measure_scheme.get_points())), [str(i) for i in np.round(measure_scheme.get_points(),2)], rotation=90, fontsize=17)
     for tick in ax_U.get_yticklabels():
         tick.set_bbox(dict(
@@ -206,8 +212,8 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
             linewidth=1.5
         ))
 
-    ax_U.set_ylabel(f'Model modes', fontsize=17)
-    ax_U.set_title('SVD (Out modes)', fontsize=17)
+    ax_U.set_ylabel(f'Model modes', fontsize=21)
+    ax_U.set_title('SVD (Out modes)', fontsize=21)
 
 
 
@@ -215,7 +221,7 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
     V_abs = np.flip(np.abs(Vh), axis=0)
 
     im_y = ax_Vh.imshow(np.atleast_2d(V_abs))
-    ax_Vh.set_title('SVD (In modes)', fontsize=17)
+    ax_Vh.set_title('SVD (In modes)', fontsize=21)
 
     if show_Vh_text:
         for (j,i),label in np.ndenumerate(V_abs):
@@ -237,13 +243,13 @@ def fit_signal(*,measurement_system, freq, measure_scheme,
         )
         ax_Vh.add_patch(rect)
 
-    ax_Vh.set_xticks(range(len(comps)), [str(i) for i in comps], rotation= 45, fontsize=17)
-    ax_Vh.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=17)
+    ax_Vh.set_xticks(range(len(comps)), [str(i) for i in comps], rotation= 45, fontsize=21)
+    ax_Vh.set_yticks(range(len(S)), [str(i) for i, _ in enumerate(S)], fontstyle='italic', fontsize=21)
 
 
 
-    ax_Vh.set_ylabel(f'Model modes', fontsize=17)
-    ax_Vh.set_xlabel(f'Model components', fontsize=17)
+    ax_Vh.set_ylabel(f'Model modes', fontsize=21)
+    ax_Vh.set_xlabel(f'Model components', fontsize=21)
 
     for tick in ax_Vh.get_yticklabels():
         tick.set_bbox(dict(
@@ -316,13 +322,39 @@ def compare_build_vs_truncate(*,build_comps = [(1,0)], measurement_system,
         fit_signal(measurement_system=measurement_system, freq= freq, measure_scheme=measure_scheme_old,
                 plot_scheme=plot_scheme, comps=build_comps, plotting_system=plotting_system, title=f'Additive Method {freq} GHz')
 
-def printmodel(*, model):
+def unwrap_at_index(data, idx):
+    idx = int(idx)
+    print(f'{idx=}')
+    top_part = data[idx:]
+    print(f'{len(data)=}')
+    print(f'{len(top_part)=}')
+    bottom_part = data[:idx+1]
+    print(f'{len(bottom_part)=}')
 
-    prev = model[0][0]
+    full_unwraped = np.concatenate((np.unwrap(bottom_part[::-1])[:0:-1],np.unwrap(top_part)))
 
-    for i, comp in enumerate(model):
-        if comp[0] > prev:
-            prev = comp[0]
-            print()
-        print(f'{comp},', end='')
+    return full_unwraped
+
+def plot_model_modes(*, freq, model, scheme, plot_scheme):
+
+    (U, S, Vh) = compute_SVD(freq=freq, measurement_scheme=scheme, components=model,normalize=True)
+
+    fig, ax = plt.subplots(nrows=len(Vh), ncols=2, figsize=(15, 2*len(Vh)))
+
+    for i, row in enumerate(Vh):
+
+        mode_signal = ModelSignal(component_matrix=model, component_amplitudes=row, legandre_polys=True)
+
+        mode_system = FreqSignalMeasurementSystem(scheme=plot_scheme, signal=mode_signal)
+
+        mode_data = mode_system.Measure(freq=freq)
+
+        # mag, pha = complex_to_mag_and_phase(mode_data[1])
+
+        ax[i][0].plot(mode_data[0], np.real(mode_data[1]), label=f'mode {i} Magnitude')
+        ax[i][1].plot(mode_data[0], unwrap_at_index(np.angle(mode_data[1]), len(mode_data[1])//2), label=f'mode {i} Phase')
+        ax[i][0].legend()
+        ax[i][1].legend()
         
+    plt.show()
+

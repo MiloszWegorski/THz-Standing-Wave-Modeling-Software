@@ -7,7 +7,7 @@ from Signal_source.Measurement_schemes import DummyMeasurementScheme
 from Signal_source.Fitter import complex_to_mag_and_phase
 from tools.Save_as_file import Mag_and_phase_to_complex
 
-from tools.dependencies import get_wavenums, create_coeff_matrix, create_component_list
+from tools.dependencies import get_wavenums, create_coeff_matrix, create_component_list,create_legrange_normalized_coeff_list
 
 class Signal(BaseClass):
 
@@ -101,14 +101,19 @@ class ModelSineSignal(Signal):
             case _:
                 raise ValueError(f'Unknown parameter name {param_name}')  
 
-class HornSignal(FrequencyDistanceBasedSignal):
-    def __init__(self, component_matrix, component_amplitudes):
+class ModelSignal(FrequencyDistanceBasedSignal):
+    def __init__(self, component_matrix, component_amplitudes, legandre_polys=False):
         self.component_list = component_matrix
         self.component_amplitudes = component_amplitudes
+        self.legandre_polys=legandre_polys
 
     def _get_amplitudes(self, frequency, scheme, noiseless):
 
-        coeff_matrix = create_coeff_matrix(self.component_list, scheme, get_wavenums(frequency))
+        if self.legandre_polys:
+            coeff_matrix = create_legrange_normalized_coeff_list(comp_list=self.component_list,
+                                                                 scheme=scheme, wavenum=get_wavenums(frequency))
+        else:
+            coeff_matrix = create_coeff_matrix(self.component_list, scheme, get_wavenums(frequency))
 
         return coeff_matrix@np.atleast_2d(self.component_amplitudes).T.squeeze()
     

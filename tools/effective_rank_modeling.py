@@ -5,12 +5,15 @@ from tools.effective_rank import *
 
 import numpy as np
 from time import sleep
+import copy
+
+from tools.dependencies import printmodel
 
 from tqdm import tqdm
 
 bool2=False
 
-def build_scheme(*, components, freqs, dist_limit):
+def build_scheme(*, components, freqs, dist_limit, point_limit, rank_target = 0.5):
 
 
     #get best distance for plot
@@ -21,7 +24,9 @@ def build_scheme(*, components, freqs, dist_limit):
 
     best_dist = scheme_range
 
-    while scheme_range<dist_limit:
+    rank_new = 0
+
+    while rank_new < len(components)-rank_target and scheme_range < dist_limit:
 
         measure_scheme_prev = RandomizedUniformMeasurement(start_position=-scheme_range, 
                                                     end_position=scheme_range,
@@ -29,7 +34,7 @@ def build_scheme(*, components, freqs, dist_limit):
                                                     randomization=0)
 
         rank_prev = get_lowest_rank_by_freq(components=components, freqs=freqs,
-                                        scheme=measure_scheme_prev)
+                                        scheme=measure_scheme_prev, normalize=True)
 
         new_range = scheme_range + 0.1
         
@@ -39,7 +44,7 @@ def build_scheme(*, components, freqs, dist_limit):
                                                             randomization=0)
         
         rank_new = get_lowest_rank_by_freq(components=components, freqs=freqs,
-                                                scheme=measure_scheme_new)
+                                                scheme=measure_scheme_new, normalize=True)
 
         delta_rank = rank_new - rank_prev
 
@@ -47,10 +52,10 @@ def build_scheme(*, components, freqs, dist_limit):
         print(f'{scheme_range=}  ', end='\r')
 
         scheme_range = new_range
-        if delta_rank > 0:
-            best_dist = scheme_range
+        best_dist = scheme_range
 
 
+    best_dist = np.round(best_dist, 2)
     #starting number of components is the number + 1
     num_points = len(components) + 1
 
@@ -60,11 +65,11 @@ def build_scheme(*, components, freqs, dist_limit):
                                                   randomization=0)
 
     erank = get_lowest_rank_by_freq(components=components, freqs=freqs,
-                                    scheme=measure_scheme)
+                                    scheme=measure_scheme, normalize=True)
 
     itter = 0
 
-    while erank < len(components)-1:
+    while erank < len(components)-rank_target and num_points < point_limit:
 
         num_points_increased = num_points + 1
 
@@ -77,7 +82,7 @@ def build_scheme(*, components, freqs, dist_limit):
 
         # eff ranks of the schemes
         erank_num_points_increase = get_lowest_rank_by_freq(components=components, freqs=freqs,
-                                        scheme=measure_scheme_more_points)
+                                        scheme=measure_scheme_more_points, normalize=True)
         
         delta_points = erank_num_points_increase - erank
 
@@ -92,9 +97,109 @@ def build_scheme(*, components, freqs, dist_limit):
 
     return measure_scheme
         
-            
 
-def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold):
+def build_model_erank(*, components, base_components, freq, scheme, N_limit, M_limit, normalize= True):
+
+    max_model = copy.copy(components)
+
+    for i in range(N_limit):
+        max_model = add_N_component(comps=max_model)
+
+    for i in range(M_limit):
+        max_model = add_M_component(comps=max_model, M_num=i)
+
+
+    components = max_model
+
+    U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=max_model,
+                           normalize=normalize)
+
+    erank = get_effective_rank(S=S)
+    print(f'{erank=}')
+
+    #truncate N worst components
+
+    #erank here is used as a max number of components that are supported by the 
+    #scheme
+    num_comps_to_truncate = int(len(max_model) - np.ceil(erank))
+
+
+    U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=max_model,
+                        normalize=normalize)
+
+    S_threshhold = len(S) - num_comps_to_truncate
+
+    rows = np.empty(shape=num_comps_to_truncate*len(max_model))
+    maximum_indexes = np.empty(shape=num_comps_to_truncate*len(max_model), dtype=int)
+
+    indexes = np.linspace(0, len(max_model)-1, len(max_model), dtype=int)
+
+
+    counter = 0
+
+    for i in Vh[S_threshhold:]:
+        for j, max_index in zip(i, indexes):
+            rows[counter] = j
+            maximum_indexes[counter] = max_index
+            counter +=1
+
+    protected_indexes = np.empty(len(base_components), dtype=int)
+
+    row_temp = rows
+
+    for i, comp in enumerate(max_model):
+        for j, base_comp in enumerate(base_components):
+            if comp == base_comp:
+                protected_indexes[j] = i
+
+    
+    #array of indexes to be sorted similtaneously with the row
+
+    # bubble sort for array and the array of the corresponding indexes
+    for i in range(len(row_temp)):
+        for j in range(len(row_temp)-1 - i):
+            if row_temp[j] > row_temp[j+1]:
+                temp = row_temp[j]
+                row_temp[j] = row_temp[j+1]
+                row_temp[j+1] = temp
+
+                temp = maximum_indexes[j]
+                maximum_indexes[j] = maximum_indexes[j+1]
+                maximum_indexes[j+1] = temp
+
+    counter = 0
+
+    print(f'{num_comps_to_truncate=}')
+
+    deleted_comp_indexes = []
+
+    for i, index_max_component in enumerate(maximum_indexes):
+        if index_max_component not in protected_indexes:
+            if counter == num_comps_to_truncate:
+                break
+            print(f'{index_max_component=}')
+            if index_max_component not in deleted_comp_indexes:
+                deleted_comp_indexes.append(index_max_component)
+                max_model.pop(index_max_component)
+                counter +=1
+
+    U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=max_model,
+                           normalize=normalize)
+
+    erank = get_effective_rank(S=S)
+    print(f'final rank = {erank}')
+    print(len(max_model))
+    print('\n')
+    printmodel(model=max_model)
+    print('\n')
+
+    return max_model
+
+        
+        
+
+
+def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold, normalize= True):
 
     base_comps = components
 
@@ -108,7 +213,7 @@ def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold
             new_comps = add_N_component(comps=components)
 
             for f in freq:
-                U, S, Vh = compute_SVD(freq=f, measurement_scheme=scheme, components=new_comps)
+                U, S, Vh = compute_SVD(freq=f, measurement_scheme=scheme, components=new_comps, normalize=True)
 
                 pbar.update(1)
 
@@ -135,7 +240,7 @@ def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold
                 new_comps = add_M_component(comps=components, M_num=(i+1))
 
                 for f in freq:        
-                    U, S, Vh = compute_SVD(freq=f, measurement_scheme=scheme, components=new_comps)
+                    U, S, Vh = compute_SVD(freq=f, measurement_scheme=scheme, components=new_comps, normalize=True)
                     pbar.update(1)
 
 
@@ -162,7 +267,7 @@ def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold
         for i in range(N_limit):
             new_comps = add_N_component(comps=components)
 
-            U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=new_comps)
+            U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=new_comps, normalize=True)
 
             pbar.update(1)
 
@@ -190,7 +295,7 @@ def  build_model(*, components, freq, scheme, limit, N_limit, M_limit, threshold
                 
                 new_comps = add_M_component(comps=components, M_num=(i+1))
 
-                U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=new_comps)
+                U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme, components=new_comps, normalize=True)
 
                 pbar.update(1)
 
@@ -219,7 +324,7 @@ def truncate_measurement(*, comps, freq, scheme, limit, threshold, base_componen
     if type(freq) in (list, np.ndarray):
         for i, f in enumerate(freq):
             U, S, Vh = compute_SVD(freq=f, measurement_scheme=scheme, 
-                                               components=comps)
+                                               components=comps, normalize=True)
             
             comps, (U, S, Vh), bool1 = truncate_components(S=S, Vh=Vh, 
                                                 components=comps,
@@ -232,7 +337,7 @@ def truncate_measurement(*, comps, freq, scheme, limit, threshold, base_componen
     else:
         U, S, Vh = compute_SVD(freq=freq, 
                                            measurement_scheme=scheme, 
-                                           components=comps)
+                                           components=comps, normalize=True)
 
         comps, (U, S, Vh), bool1 = truncate_components(S=S,
                                             Vh=Vh,
@@ -282,7 +387,7 @@ def truncate_components(*, U, S, Vh, components, base_components, freq, measurem
 
         U, S, Vh = compute_SVD(freq=freq, 
                                         measurement_scheme=measurement_scheme,
-                                        components=masked_components)
+                                        components=masked_components, normalize=True)
 
         return truncate_components(S=S, Vh=Vh, components=masked_components, freq=freq, base_components=base_components,
                 measurement_scheme=measurement_scheme, limit=limit, U = U, improved_bool=improved_bool, threshold=threshold)
@@ -381,7 +486,7 @@ def randomize_scheme(scheme, U_decomposition, freq, comps, rand_0 = 0):
                                                 num_points=num_point,
                                                 randomization=randomizarion)
 
-        U, S, Vh = compute_SVD(freq=freq, measurement_scheme=new_scheme, components=comps)
+        U, S, Vh = compute_SVD(freq=freq, measurement_scheme=new_scheme, components=comps, normalize=True)
 
         S_sum_new = np.sum(U)
         S_sum_new = np.sum(U_decomposition)
@@ -394,19 +499,3 @@ def randomize_scheme(scheme, U_decomposition, freq, comps, rand_0 = 0):
         randomizarion += 0.01
 
     return new_scheme, (U, S, Vh), True
-
-
-def get_lowest_rank_by_freq(*, components, freqs, scheme):
-
-    lowest_erank = sys.maxsize
-
-    for f in freqs:
-        (_, S, _) = compute_SVD(freq=f, measurement_scheme=scheme, 
-                                components=components)
-
-        effective_rank = get_effective_rank(S=S)
-
-        if effective_rank < lowest_erank:
-            lowest_erank = effective_rank
-
-    return lowest_erank

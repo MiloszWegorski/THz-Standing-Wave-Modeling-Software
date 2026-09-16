@@ -6,7 +6,7 @@ import time
 from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal
+from Signal_source.Model_signals import ModelSignal, NoisyComplexSignal
 from Signal_source.Measurement_Systems import FreqSignalMeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter, complex_to_mag_and_phase
 

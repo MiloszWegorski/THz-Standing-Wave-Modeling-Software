@@ -6,7 +6,7 @@ import time
 from tools.dependencies import *
 
 from Signal_source.Measurement_schemes import UniformMeasurement
-from Signal_source.Model_signals import HornSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
+from Signal_source.Model_signals import ModelSignal, NoisyComplexSignal, get_wavenums, create_coeff_list
 from Signal_source.Measurement_Systems import MeasurementSystem
 from Signal_source.Fitter import HornTransmissionFitter, complex_to_mag_and_phase
 
@@ -22,9 +22,9 @@ def simulateHornFreqSweep(frequency, num_trails, Measurement_scheme, N, M, Trans
         complex_simulated_params[i] = np.power(10, 1) *np.random.normal(0, 1)
 
     #signal object to generate simulated measurement
-    signal = NoisyComplexSignal(HornSignal(frequency, N, M, Transmission, complex_simulated_params), amplitude_noise, phase_noise)
+    signal = NoisyComplexSignal(ModelSignal(frequency, N, M, Transmission, complex_simulated_params), amplitude_noise, phase_noise)
 
-    # signal = HornSignal(frequency_range[0], N, M, Transmission, complex_simulated_params)
+    # signal = ModelSignal(frequency_range[0], N, M, Transmission, complex_simulated_params)
 
     #measurement scheme to retrieve data for given measurement scheme
     measureSystem = MeasurementSystem(Measurement_scheme, signal)
@@ -129,7 +129,7 @@ class Analyze_Scheme(BaseClass):
     def SimulateHornMeasurement(self, N, M, measurement_scheme, coeff_matrix, freq):
 
         #create measurement system to allow for repeated simulated measurements
-        signal = NoisyComplexSignal(HornSignal(coeff_matrix), self.amp_noise, self.phase_noise)
+        signal = NoisyComplexSignal(ModelSignal(coeff_matrix), self.amp_noise, self.phase_noise)
         system = MeasurementSystem(measurement_scheme, signal)
 
         # Create fitter for measurement

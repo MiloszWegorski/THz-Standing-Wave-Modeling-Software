@@ -1,8 +1,11 @@
 import numpy as np
 import scipy
+import math
+
 from abc import ABC, abstractmethod
 from scipy.optimize import curve_fit
 from tools.dependencies import get_wavenums, create_coeff_matrix
+from tools.effective_rank import compute_SVD, get_effective_rank
 
 from tools.dependencies import *
 class Fitter(ABC):
@@ -142,9 +145,10 @@ class ValleyFitter(Fitter):
 
 class HornTransmissionFitter(Fitter):
 
-    def __init__(self, *, components):
+    def __init__(self, *, components, erank_accuracy=False):
 
         self.components = components
+        self.erank_accuracy = erank_accuracy
 
     def _fit_points(self, *, Amplitudes, freq, scheme):
 
@@ -152,7 +156,51 @@ class HornTransmissionFitter(Fitter):
         coeff_matrix = create_coeff_matrix(self.components, scheme, get_wavenums(freq))
 
 
-        fit = np.linalg.lstsq(coeff_matrix, Amplitudes, -1)
+        if self.erank_accuracy:
+
+
+
+            # effective rank calculation
+            _, S_rank, _ = compute_SVD(freq=freq, measurement_scheme=scheme,
+                                   components=self.components, normalize=True)
+            erank = int(math.ceil(get_effective_rank(S=S_rank)))
+            # print(f'{erank=}')
+
+
+            #SVD for best fit
+            U, S, Vh = compute_SVD(freq=freq, measurement_scheme=scheme,
+                                   components=self.components, normalize=False)            
+            Vh = np.flip(Vh, axis=0)
+
+
+            S_inv = np.empty(len(S), dtype=float)
+
+            for i, S_val in enumerate(S):
+                if i < erank:
+                    S_inv[i] = 1/S_val
+                else:
+                    S_inv[i] = 0
+
+            S_inv_r = np.diag(S_inv)
+
+
+            # Rank limit the modes of the svd
+            U_r = U[:, :erank]
+            S_r = S[:erank]
+            Vh_r = Vh[:erank, :]
+
+            A_dagger = Vh.conj().T @ S_inv_r @ U.conj().T
+            # A_dagger = Vh_r. conj().T @ S_inv_r @ U_r.conj().T
+
+
+            # x = Vh_r @ ((U_r.conj().T @ Amplitudes) / S_r)
+
+            x = A_dagger @ Amplitudes
+
+            return x
+        else:
+
+            fit = np.linalg.lstsq(coeff_matrix, Amplitudes, -1)
 
         return fit[0]
 
